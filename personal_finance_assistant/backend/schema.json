@@ -1,0 +1,79 @@
+{
+  "tables": {
+    "users": {
+      "columns": {
+        "id": {"type": "uuid", "pk": true, "default": "uuid_generate_v4()"},
+        "device_id": {"type": "text", "unique": true, "nullable": false},
+        "fcm_token": {"type": "text"},
+        "created_at": {"type": "timestamptz", "default": "now()"},
+        "updated_at": {"type": "timestamptz", "default": "now()"}
+      }
+    },
+    "cards": {
+      "columns": {
+        "id": {"type": "uuid", "pk": true, "default": "uuid_generate_v4()"},
+        "user_id": {"type": "uuid", "fk": "users.id", "onDelete": "CASCADE"},
+        "card_masked": {"type": "text", "nullable": false},
+        "card_type": {"type": "text", "default": "credit_card", "enum": ["credit_card", "debit_account"]},
+        "total_limit": {"type": "numeric(12,2)", "comment": "Total Credit Limit in INR"},
+        "available_limit": {"type": "numeric(12,2)", "comment": "Available Credit Limit in INR"},
+        "billing_cycle_day": {"type": "integer", "default": 1, "comment": "Day of month (1-28)"},
+        "is_active": {"type": "boolean", "default": true},
+        "created_at": {"type": "timestamptz", "default": "now()"},
+        "updated_at": {"type": "timestamptz", "default": "now()"}
+      },
+      "constraints": {
+        "unique_user_card": ["user_id", "card_masked"]
+      }
+    },
+    "transactions": {
+      "columns": {
+        "id": {"type": "uuid", "pk": true, "default": "uuid_generate_v4()"},
+        "card_id": {"type": "uuid", "fk": "cards.id", "onDelete": "CASCADE"},
+        "upi_ref_id": {"type": "text", "unique": true, "nullable": false, "comment": "Deduplication key"},
+        "amount": {"type": "numeric(12,2)", "nullable": false},
+        "merchant": {"type": "text"},
+        "category": {"type": "text", "default": "uncategorized"},
+        "transaction_type": {"type": "text", "default": "debit", "enum": ["debit", "credit", "refund"]},
+        "is_refund": {"type": "boolean", "default": false},
+        "refund_of_upi_ref": {"type": "text", "fk": "transactions.upi_ref_id", "comment": "Links refund to original txn"},
+        "source": {"type": "text", "default": "email", "enum": ["email", "sms", "manual"]},
+        "raw_message": {"type": "text", "comment": "Original email/SMS body for audit"},
+        "transacted_at": {"type": "timestamptz", "nullable": false},
+        "created_at": {"type": "timestamptz", "default": "now()"}
+      },
+      "indexes": ["card_id", "transacted_at", "category"]
+    },
+    "billing_cycles": {
+      "columns": {
+        "id": {"type": "uuid", "pk": true, "default": "uuid_generate_v4()"},
+        "card_id": {"type": "uuid", "fk": "cards.id", "onDelete": "CASCADE"},
+        "cycle_start": {"type": "date", "nullable": false},
+        "cycle_end": {"type": "date", "nullable": false},
+        "total_spent": {"type": "numeric(12,2)", "default": 0.00},
+        "total_refunded": {"type": "numeric(12,2)", "default": 0.00},
+        "net_spent": {"type": "numeric(12,2)", "generated": "total_spent - total_refunded"},
+        "created_at": {"type": "timestamptz", "default": "now()"}
+      },
+      "constraints": {
+        "unique_card_cycle": ["card_id", "cycle_start"]
+      },
+      "indexes": ["card_id"]
+    }
+  },
+  "rls": true,
+  "fcm_payload_spec": {
+    "notification": {
+      "title": "New Transaction Detected",
+      "body": "₹{amount} at {merchant}"
+    },
+    "data": {
+      "transaction_id": "uuid",
+      "amount": "string",
+      "merchant": "string",
+      "upi_ref_id": "string",
+      "card_masked": "string",
+      "action": "categorize"
+    }
+  }
+}

@@ -1,0 +1,41 @@
+name: personal_finance_assistant
+description: "Foundational Finance Friend — Personal Finance Tracking App"
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # ── State Management ────────────────────────────────
+  provider: ^6.1.5
+
+  # ── Biometric / Local Auth ──────────────────────────
+  local_auth: ^3.0.1
+
+  # ── Firebase (FCM Push Notifications) ───────────────
+  firebase_core: ^4.9.0
+  firebase_messaging: ^16.2.0
+
+  # ── HTTP Client ─────────────────────────────────────
+  http: ^1.4.0
+
+  # ── Formatting ──────────────────────────────────────
+  intl: ^0.20.2
+
+  # ── Icons ───────────────────────────────────────────
+  cupertino_icons: ^1.0.8
+
+  # ── Google Fonts ────────────────────────────────────
+  google_fonts: ^6.2.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
