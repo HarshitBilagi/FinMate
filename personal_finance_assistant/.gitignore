@@ -61,5 +61,4 @@ android/key.properties
 android/local.properties
 .env
 google-services.json
-personal_finance_assistant/backend/firebase_service_account.json
-.env
+backend/firebase_service_account.json
