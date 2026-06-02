@@ -149,4 +149,95 @@ class DashboardProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  /// Flags a transaction as ignored locally and on the backend.
+  Future<void> ignoreTransaction(String upiRefId) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _apiClient.ignoreTransaction(upiRefId);
+      final idx = _recentTransactions.indexWhere((t) => t.upiRefId == upiRefId);
+      if (idx != -1) {
+        _recentTransactions[idx] = _recentTransactions[idx].copyWith(category: 'ignored');
+      }
+    } on FinanceApiException catch (e) {
+      _errorMessage = e.message;
+    } catch (e) {
+      _errorMessage = "Failed to ignore transaction: $e";
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Adds a new transaction or updates an existing one and categorizes it.
+  Future<void> addAndCategorizeTransaction({
+    required String upiRefId,
+    required double amount,
+    required String merchant,
+    required String category,
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    final existingIdx = _recentTransactions.indexWhere((t) => t.upiRefId == upiRefId);
+
+    if (existingIdx != -1) {
+      final txn = _recentTransactions[existingIdx];
+      _recentTransactions[existingIdx] = txn.copyWith(category: category);
+      try {
+        final response = await _apiClient.categorizeTransaction(txn.id, category);
+        final newRemainingLimit = response['remaining_limit'];
+        if (_cards.isNotEmpty && newRemainingLimit != null) {
+          _cards[0] = CardModel(
+            id: _cards[0].id,
+            userId: _cards[0].userId,
+            cardMasked: _cards[0].cardMasked,
+            cardType: _cards[0].cardType,
+            totalLimit: _cards[0].totalLimit,
+            availableLimit: (newRemainingLimit as num).toDouble(),
+            billingCycleDay: _cards[0].billingCycleDay,
+          );
+        }
+      } catch (e) {
+        _errorMessage = "Failed to categorize: $e";
+      }
+    } else {
+      final newTxn = Transaction(
+        id: 'txn-${DateTime.now().millisecondsSinceEpoch}',
+        cardId: 'card-primary',
+        upiRefId: upiRefId,
+        amount: amount,
+        merchant: merchant,
+        category: category,
+        transactedAt: DateTime.now(),
+      );
+
+      _recentTransactions.insert(0, newTxn);
+
+      try {
+        final response = await _apiClient.categorizeTransaction(newTxn.id, category);
+        final newRemainingLimit = response['remaining_limit'];
+        if (_cards.isNotEmpty && newRemainingLimit != null) {
+          _cards[0] = CardModel(
+            id: _cards[0].id,
+            userId: _cards[0].userId,
+            cardMasked: _cards[0].cardMasked,
+            cardType: _cards[0].cardType,
+            totalLimit: _cards[0].totalLimit,
+            availableLimit: (newRemainingLimit as num).toDouble(),
+            billingCycleDay: _cards[0].billingCycleDay,
+          );
+        }
+      } catch (e) {
+        debugPrint("Could not sync category to backend: $e");
+      }
+    }
+
+    _isLoading = false;
+    notifyListeners();
+  }
 }

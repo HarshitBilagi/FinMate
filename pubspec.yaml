@@ -18,7 +18,7 @@ dependencies:
 
   # ── Firebase (FCM Push Notifications) ───────────────
   firebase_core: ^4.9.0
-  firebase_messaging: ^16.2.0
+  firebase_messaging: ^16.3.0
 
   # ── HTTP Client ─────────────────────────────────────
   http: ^1.4.0

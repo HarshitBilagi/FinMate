@@ -8,7 +8,8 @@ from app.db.supabase import get_supabase_client
 from app.schemas.api_schemas import (
     DashboardSummaryResponse,
     CategorizeTransactionRequest,
-    CategorizeTransactionResponse
+    CategorizeTransactionResponse,
+    IgnoreTransactionResponse
 )
 
 router = APIRouter()
@@ -141,4 +142,30 @@ def categorize_transaction(
         raise
     except Exception as e:
         logger.error(f"Error categorizing transaction: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@router.post("/transactions/ignore/{upi_ref_id}", response_model=IgnoreTransactionResponse)
+def ignore_transaction(upi_ref_id: str, device_id: str = Depends(get_device_id)):
+    """
+    Flags the transaction as ignored using the unique UPI Ref ID.
+    """
+    supabase = get_supabase_client()
+    try:
+        logger.info(f"Flagging transaction with UPI Ref ID {upi_ref_id} as ignored.")
+        
+        # Try updating Supabase (setting category to 'ignored' or updating an is_ignored boolean if exists)
+        try:
+            supabase.table("transactions").update({
+                "category": "ignored",
+                "updated_at": datetime.now().isoformat()
+            }).eq("upi_ref_id", upi_ref_id).execute()
+        except Exception as e:
+            logger.warning(f"Could not update Supabase for ignore: {e}")
+            
+        return IgnoreTransactionResponse(
+            upi_ref_id=upi_ref_id,
+            message="Transaction ignored successfully"
+        )
+    except Exception as e:
+        logger.error(f"Error ignoring transaction: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")

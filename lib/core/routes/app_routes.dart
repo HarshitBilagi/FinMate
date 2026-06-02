@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:personal_finance_assistant/screens/auth/auth_screen.dart';
 import 'package:personal_finance_assistant/screens/home/home_screen.dart';
 import 'package:personal_finance_assistant/screens/transactions/transactions_screen.dart';
+import 'package:personal_finance_assistant/screens/expenses/expenses_screen.dart';
 
 class AppRoutes {
   AppRoutes._();
@@ -14,10 +15,12 @@ class AppRoutes {
   static const String auth = '/auth';
   static const String home = '/home';
   static const String transactions = '/transactions';
+  static const String expenses = '/expenses';
 
   static Map<String, WidgetBuilder> get routes => {
         auth: (_) => const AuthScreen(),
         home: (_) => const HomeScreen(),
         transactions: (_) => const TransactionsScreen(),
+        expenses: (_) => const ExpensesScreen(),
       };
 }

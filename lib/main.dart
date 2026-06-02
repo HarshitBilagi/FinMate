@@ -9,6 +9,9 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:personal_finance_assistant/services/notification_service.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:personal_finance_assistant/core/theme/app_theme.dart';
 import 'package:personal_finance_assistant/core/routes/app_routes.dart';
 import 'package:personal_finance_assistant/providers/auth_provider.dart';
@@ -16,6 +19,22 @@ import 'package:personal_finance_assistant/providers/dashboard_provider.dart';
 // Firebase imports — uncomment when google-services.json is configured:
 // import 'package:firebase_core/firebase_core.dart';
 // import 'package:personal_finance_assistant/services/notification_service.dart';
+
+// void main() async {
+//   WidgetsFlutterBinding.ensureInitialized();
+
+//   // Lock orientation to portrait
+//   await SystemChrome.setPreferredOrientations([
+//     DeviceOrientation.portraitUp,
+//     DeviceOrientation.portraitDown,
+//   ]);
+
+//   // Firebase initialization — uncomment when google-services.json is added:
+//   // await Firebase.initializeApp();
+//   // FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+//   // await NotificationService().initialize();
+//   runApp(const FinanceFriendApp());
+// }
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,10 +45,10 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
 
-  // Firebase initialization — uncomment when google-services.json is added:
-  // await Firebase.initializeApp();
-  // FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-  // await NotificationService().initialize();
+  // Firebase initialization — Now active!
+  await Firebase.initializeApp();
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  await NotificationService().initialize();
 
   runApp(const FinanceFriendApp());
 }

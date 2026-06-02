@@ -16,3 +16,7 @@ class CategorizeTransactionResponse(BaseModel):
     category: str
     remaining_limit: float  # Returned as per rubric
     message: str
+
+class IgnoreTransactionResponse(BaseModel):
+    upi_ref_id: str
+    message: str

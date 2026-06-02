@@ -9,15 +9,32 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:personal_finance_assistant/providers/dashboard_provider.dart';
-import 'package:personal_finance_assistant/screens/home/widgets/transaction_tile.dart';
 import 'package:personal_finance_assistant/screens/transactions/categorize_sheet.dart';
 import 'package:personal_finance_assistant/models/transaction.dart';
 
 class TransactionsScreen extends StatelessWidget {
   const TransactionsScreen({super.key});
 
+  Color _categoryColor(String category) {
+    return switch (category.toLowerCase()) {
+      'food' => const Color(0xFFEF4444),
+      'shopping' => const Color(0xFF8B5CF6),
+      'transport' => const Color(0xFF3B82F6),
+      'entertainment' => const Color(0xFFEC4899),
+      'bills' => const Color(0xFFF97316),
+      'health' => const Color(0xFF14B8A6),
+      'education' => const Color(0xFF6366F1),
+      'travel' => const Color(0xFF0EA5E9),
+      'groceries' => const Color(0xFF22C55E),
+      'fuel' => const Color(0xFF78716C),
+      'ignored' => Colors.grey,
+      _ => const Color(0xFF94A3B8), // uncategorized
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final currencyFormat = NumberFormat.currency(
       locale: 'en_IN',
       symbol: '\u20B9',
@@ -26,7 +43,7 @@ class TransactionsScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('All Transactions'),
+        title: const Text('Transaction Ledger'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, size: 20),
           onPressed: () => Navigator.of(context).pop(),
@@ -44,7 +61,7 @@ class TransactionsScreen extends StatelessWidget {
                   Icon(
                     Icons.receipt_long_outlined,
                     size: 64,
-                    color: Theme.of(context).brightness == Brightness.dark
+                    color: isDark
                         ? Colors.white.withValues(alpha: 0.2)
                         : Colors.black.withValues(alpha: 0.15),
                   ),
@@ -54,7 +71,7 @@ class TransactionsScreen extends StatelessWidget {
                     style: GoogleFonts.inter(
                       fontSize: 16,
                       fontWeight: FontWeight.w500,
-                      color: Theme.of(context).brightness == Brightness.dark
+                      color: isDark
                           ? Colors.white.withValues(alpha: 0.4)
                           : Colors.black.withValues(alpha: 0.4),
                     ),
@@ -70,14 +87,118 @@ class TransactionsScreen extends StatelessWidget {
             itemCount: transactions.length,
             itemBuilder: (context, index) {
               final txn = transactions[index];
-              return TransactionTile(
-                transaction: txn,
-                currencyFormat: currencyFormat,
-                onCategorize: () => _showCategorizeSheet(context, txn),
+              return GestureDetector(
+                onTap: () => _showCategorizeSheet(context, txn),
+                child: _buildLedgerRow(context, txn, currencyFormat),
               );
             },
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildLedgerRow(
+      BuildContext context, Transaction txn, NumberFormat currencyFormat) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final dateStr = DateFormat('dd MMM yyyy').format(txn.transactedAt);
+    final timeStr = DateFormat('hh:mm a').format(txn.transactedAt);
+    final categoryStr =
+        txn.category[0].toUpperCase() + txn.category.substring(1);
+    final categoryColor = _categoryColor(txn.category);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.05)
+              : Colors.black.withValues(alpha: 0.04),
+        ),
+      ),
+      child: Row(
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                dateStr,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.9)
+                      : const Color(0xFF1E293B),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                timeStr,
+                style: GoogleFonts.inter(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.4)
+                      : Colors.black.withValues(alpha: 0.4),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 20),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  txn.merchant ?? 'Unknown Receiver',
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? Colors.white : const Color(0xFF1E293B),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: categoryColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    categoryStr,
+                    style: GoogleFonts.inter(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: categoryColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            currencyFormat.format(txn.amount),
+            style: GoogleFonts.inter(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: isDark ? Colors.white : const Color(0xFF1E293B),
+            ),
+          ),
+        ],
       ),
     );
   }
