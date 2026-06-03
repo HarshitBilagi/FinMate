@@ -318,6 +318,13 @@ def fetch_icici_emails() -> list[ParsedTransaction]:
                 body = _decode_email_body(msg)
                 full_text = f"{subject}\n{body}"
 
+                # Temporarily print raw email text to console
+                print("=" * 80)
+                print(f"DEBUG: Raw Email Full Text (ID: {email_id.decode()}):")
+                print(full_text)
+                print("=" * 80)
+                print("--- RAW EMAIL START ---", repr(full_text), "--- RAW EMAIL END ---")
+
                 # Try parsing as credit card email first, then as SMS-forwarded
                 parsed = parse_email_transaction(full_text)
                 if not parsed:

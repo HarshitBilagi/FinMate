@@ -16,7 +16,7 @@ class FinanceApiException implements Exception {
 class FinanceApiClient {
   // Use 10.0.2.2 for Android emulator testing against local backend
   // In production, this would be your remote backend URL
-  static const String _baseUrl = 'http://192.168.1.5:8000';
+  static const String _baseUrl = 'https://finmate-backend-34vb.onrender.com';
   static const Duration _timeout = Duration(seconds: 10);
   
   // For the MVP, we use a dummy device ID to identify the user
