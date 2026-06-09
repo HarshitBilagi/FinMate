@@ -31,6 +31,11 @@ class NotificationService {
   Stream<TransactionNotification> get onTransactionReceived =>
       _notificationStream.stream;
 
+  /// Manually trigger a transaction categorization modal from local listener.
+  void triggerTransactionCategorization(TransactionNotification notification) {
+    _notificationStream.add(notification);
+  }
+
   /// Initialize FCM: request permissions, get token, set up listeners.
   Future<void> initialize() async {
     // Request notification permissions (required on iOS & Android 13+)
@@ -124,6 +129,7 @@ class TransactionNotification {
   final String upiRefId;
   final String cardMasked;
   final String action;
+  final DateTime? transactionDate;
 
   const TransactionNotification({
     required this.transactionId,
@@ -132,9 +138,10 @@ class TransactionNotification {
     required this.upiRefId,
     required this.cardMasked,
     required this.action,
+    this.transactionDate,
   });
 
   @override
   String toString() =>
-      'TxnNotification(amount=$amount, merchant=$merchant, upi=$upiRefId)';
+      'TxnNotification(amount=$amount, merchant=$merchant, upi=$upiRefId, date=$transactionDate)';
 }

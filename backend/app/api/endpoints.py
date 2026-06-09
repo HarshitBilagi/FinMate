@@ -9,7 +9,9 @@ from app.schemas.api_schemas import (
     DashboardSummaryResponse,
     CategorizeTransactionRequest,
     CategorizeTransactionResponse,
-    IgnoreTransactionResponse
+    IgnoreTransactionResponse,
+    CreateTransactionRequest,
+    CreateTransactionResponse
 )
 
 router = APIRouter()
@@ -169,3 +171,89 @@ def ignore_transaction(upi_ref_id: str, device_id: str = Depends(get_device_id))
     except Exception as e:
         logger.error(f"Error ignoring transaction: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
+
+@router.post("/transactions", response_model=CreateTransactionResponse)
+def create_transaction(
+    request: CreateTransactionRequest,
+    device_id: str = Depends(get_device_id)
+):
+    supabase = get_supabase_client()
+    try:
+        # Find user by device_id
+        user_res = supabase.table("users").select("id").eq("device_id", device_id).execute()
+        if not user_res.data:
+            user_res = supabase.table("users").insert({"device_id": device_id}).execute()
+            if not user_res.data:
+                raise HTTPException(status_code=500, detail="Failed to create user")
+        
+        user_id = user_res.data[0]['id']
+        
+        # Find card by user_id and card_masked
+        card_res = supabase.table("cards").select("id, available_limit").eq("user_id", user_id).eq("card_masked", request.card_masked).execute()
+        if not card_res.data:
+            card_data = {
+                "user_id": user_id,
+                "card_masked": request.card_masked,
+                "card_type": "credit_card",
+                "total_limit": 200000.00,
+                "available_limit": 200000.00,
+                "billing_cycle_day": 15
+            }
+            card_res = supabase.table("cards").insert(card_data).execute()
+            if not card_res.data:
+                raise HTTPException(status_code=500, detail="Failed to create card")
+                
+        card = card_res.data[0]
+        card_id = card['id']
+        current_limit = float(card['available_limit'])
+        
+        # Use client-parsed SMS date when provided, else fallback to server time
+        transacted_at = request.transaction_date if request.transaction_date else datetime.now().isoformat()
+        
+        # Insert transaction
+        txn_data = {
+            "card_id": card_id,
+            "upi_ref_id": request.upi_ref_id,
+            "amount": request.amount,
+            "merchant": request.merchant,
+            "category": "uncategorized",
+            "transaction_type": "debit",
+            "is_refund": False,
+            "source": request.source,
+            "raw_message": request.raw_message,
+            "transacted_at": transacted_at
+        }
+        
+        try:
+            txn_res = supabase.table("transactions").insert(txn_data).execute()
+            if not txn_res.data:
+                raise HTTPException(status_code=500, detail="Failed to insert transaction")
+                
+            new_limit = max(0.0, current_limit - request.amount)
+            supabase.table("cards").update({"available_limit": new_limit}).eq("id", card_id).execute()
+            
+            created_txn = txn_res.data[0]
+            return CreateTransactionResponse(
+                id=created_txn['id'],
+                upi_ref_id=request.upi_ref_id,
+                amount=request.amount,
+                merchant=request.merchant,
+                card_masked=request.card_masked,
+                message="Transaction created successfully"
+            )
+        except Exception as e:
+            existing = supabase.table("transactions").select("id").eq("upi_ref_id", request.upi_ref_id).execute()
+            if existing.data:
+                return CreateTransactionResponse(
+                    id=existing.data[0]['id'],
+                    upi_ref_id=request.upi_ref_id,
+                    amount=request.amount,
+                    merchant=request.merchant,
+                    card_masked=request.card_masked,
+                    message="Transaction already exists"
+                )
+            raise e
+            
+    except Exception as e:
+        logger.error(f"Error creating transaction: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))

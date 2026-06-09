@@ -16,7 +16,7 @@ class DashboardProvider extends ChangeNotifier {
   
   double _savingsBalance = 0;
   List<CardModel> _cards = [];
-  List<Transaction> _recentTransactions = [];
+  final List<Transaction> _recentTransactions = [];
 
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -75,29 +75,8 @@ class DashboardProvider extends ChangeNotifier {
         );
       }
 
-      // Initialize mock transactions if empty (since there is no /transactions endpoint requested yet)
-      if (_recentTransactions.isEmpty) {
-        _recentTransactions = [
-          Transaction(
-            id: 'txn-001',
-            cardId: 'card-primary',
-            upiRefId: '649827115634',
-            amount: 80.00,
-            merchant: 'BEJADI V',
-            category: 'uncategorized',
-            transactedAt: DateTime.now().subtract(const Duration(hours: 1)),
-          ),
-          Transaction(
-            id: 'txn-002',
-            cardId: 'card-primary',
-            upiRefId: '649918293649',
-            amount: 267.00,
-            merchant: 'NIDHIN NATH T P',
-            category: 'uncategorized',
-            transactedAt: DateTime.now().subtract(const Duration(hours: 3)),
-          ),
-        ];
-      }
+      // Recent transactions are populated by real SMS interceptions only.
+      // No mock seeding — the UI handles empty state gracefully.
     } on FinanceApiException catch (e) {
       _errorMessage = e.message;
     } catch (e) {

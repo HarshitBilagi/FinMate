@@ -10,8 +10,13 @@ import 'package:personal_finance_assistant/services/notification_service.dart';
 
 class TransactionCategorizeModal extends StatefulWidget {
   final TransactionNotification notification;
+  final VoidCallback? onDismiss;
 
-  const TransactionCategorizeModal({super.key, required this.notification});
+  const TransactionCategorizeModal({
+    super.key,
+    required this.notification,
+    this.onDismiss,
+  });
 
   @override
   State<TransactionCategorizeModal> createState() =>
@@ -223,6 +228,7 @@ class _TransactionCategorizeModalState
                     context
                         .read<DashboardProvider>()
                         .ignoreTransaction(widget.notification.upiRefId);
+                    widget.onDismiss?.call();
                     Navigator.of(context).pop();
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
@@ -266,6 +272,7 @@ class _TransactionCategorizeModalState
                           merchant: widget.notification.merchant,
                           category: categoryToUse,
                         );
+                    widget.onDismiss?.call();
                     Navigator.of(context).pop();
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(

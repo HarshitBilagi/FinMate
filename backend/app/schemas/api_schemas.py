@@ -20,3 +20,20 @@ class CategorizeTransactionResponse(BaseModel):
 class IgnoreTransactionResponse(BaseModel):
     upi_ref_id: str
     message: str
+
+class CreateTransactionRequest(BaseModel):
+    upi_ref_id: str
+    amount: float
+    merchant: str
+    card_masked: str
+    raw_message: str
+    source: str = "sms"
+    transaction_date: Optional[str] = None
+
+class CreateTransactionResponse(BaseModel):
+    id: str
+    upi_ref_id: str
+    amount: float
+    merchant: str
+    card_masked: str
+    message: str

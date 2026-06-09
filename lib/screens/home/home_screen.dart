@@ -18,6 +18,8 @@ import 'package:personal_finance_assistant/models/transaction.dart';
 import 'package:personal_finance_assistant/models/card_model.dart';
 import 'package:personal_finance_assistant/services/notification_service.dart';
 import 'package:personal_finance_assistant/screens/transactions/transaction_categorize_modal.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:personal_finance_assistant/core/services/sms_receiver_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -35,20 +37,56 @@ class _HomeScreenState extends State<HomeScreen> {
 
   StreamSubscription<TransactionNotification>? _notificationSubscription;
 
+  /// Dynamic queue of unprocessed notifications (replaces the old mock handler)
+  final List<TransactionNotification> _pendingNotifications = [];
+  int _unreadCount = 0;
+
+  Future<void> _requestPermissions() async {
+    final statuses = await [
+      Permission.sms,
+      Permission.notification,
+    ].request();
+
+    if (statuses[Permission.sms]?.isGranted ?? false) {
+      // Start listening to SMS if permissions were granted
+      SmsReceiverService.startListening();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<DashboardProvider>().loadDashboard();
+      _requestPermissions();
+      _drainPendingTransaction();
     });
 
-    // Listen for incoming transaction notifications and open categorize modal automatically
+    // Listen for incoming transaction notifications — queue them, don't auto-show
     _notificationSubscription =
         NotificationService().onTransactionReceived.listen((notification) {
       if (mounted) {
+        setState(() {
+          _pendingNotifications.insert(0, notification);
+          _unreadCount++;
+        });
+        // Also auto-show the modal for foreground interceptions
         _showTransactionCategorizeModal(context, notification);
       }
     });
+  }
+
+  /// Drain any cold-start notification payload that was staged in SharedPreferences
+  /// by SmsReceiverService.initialize() when the app was launched from a notification tap.
+  Future<void> _drainPendingTransaction() async {
+    final pending = await SmsReceiverService.drainPendingNotification();
+    if (pending != null && mounted) {
+      setState(() {
+        _pendingNotifications.insert(0, pending);
+        _unreadCount++;
+      });
+      _showTransactionCategorizeModal(context, pending);
+    }
   }
 
   @override
@@ -57,13 +95,24 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
+  void _clearNotification(TransactionNotification notification) {
+    if (!mounted) return;
+    setState(() {
+      _pendingNotifications.removeWhere((n) => n.upiRefId == notification.upiRefId);
+      _unreadCount = _pendingNotifications.length;
+    });
+  }
+
   void _showTransactionCategorizeModal(
       BuildContext context, TransactionNotification notification) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => TransactionCategorizeModal(notification: notification),
+      builder: (_) => TransactionCategorizeModal(
+        notification: notification,
+        onDismiss: () => _clearNotification(notification),
+      ),
     );
   }
 
@@ -79,20 +128,50 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: const Icon(Icons.bar_chart_rounded),
             onPressed: () => Navigator.of(context).pushNamed('/expenses'),
           ),
-          IconButton(
-            icon: const Icon(Icons.notifications_outlined),
-            onPressed: () {
-              // Simulate a new intercepted transaction notification for manual testing
-              final mockNotification = TransactionNotification(
-                transactionId: 'txn-mock-${DateTime.now().millisecondsSinceEpoch}',
-                amount: '450.00',
-                merchant: 'Zomato Food Delivery',
-                upiRefId: 'UPI${DateTime.now().millisecond}999',
-                cardMasked: 'XX4326',
-                action: 'categorize',
-              );
-              _showTransactionCategorizeModal(context, mockNotification);
-            },
+          // Dynamic notification badge — shows unread count from real SMS data
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.notifications_outlined),
+                onPressed: () {
+                  if (_pendingNotifications.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('No new transactions.'),
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                    return;
+                  }
+                  // Show the most recent real pending notification
+                  final latest = _pendingNotifications.first;
+                  _showTransactionCategorizeModal(context, latest);
+                },
+              ),
+              if (_unreadCount > 0)
+                Positioned(
+                  top: 6,
+                  right: 6,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFF43F5E),
+                      shape: BoxShape.circle,
+                    ),
+                    constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                    child: Text(
+                      '$_unreadCount',
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(width: 8),
         ],

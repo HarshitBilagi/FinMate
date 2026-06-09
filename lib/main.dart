@@ -16,6 +16,7 @@ import 'package:personal_finance_assistant/core/theme/app_theme.dart';
 import 'package:personal_finance_assistant/core/routes/app_routes.dart';
 import 'package:personal_finance_assistant/providers/auth_provider.dart';
 import 'package:personal_finance_assistant/providers/dashboard_provider.dart';
+import 'package:personal_finance_assistant/core/services/sms_receiver_service.dart';
 // Firebase imports — uncomment when google-services.json is configured:
 // import 'package:firebase_core/firebase_core.dart';
 // import 'package:personal_finance_assistant/services/notification_service.dart';
@@ -49,6 +50,10 @@ void main() async {
   await Firebase.initializeApp();
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   await NotificationService().initialize();
+
+  // Initialize native SMS listener services
+  await SmsReceiverService.initialize();
+  await SmsReceiverService.startListening();
 
   runApp(const FinanceFriendApp());
 }

@@ -49,6 +49,30 @@ class FinanceApiClient {
     );
   }
 
+  /// Creates a new transaction parsed by the local SMS receiver on the backend.
+  Future<Map<String, dynamic>> createTransaction({
+    required String upiRefId,
+    required double amount,
+    required String merchant,
+    required String cardMasked,
+    required String rawMessage,
+    String source = 'sms',
+    DateTime? transactionDate,
+  }) async {
+    final body = <String, dynamic>{
+      'upi_ref_id': upiRefId,
+      'amount': amount,
+      'merchant': merchant,
+      'card_masked': cardMasked,
+      'raw_message': rawMessage,
+      'source': source,
+    };
+    if (transactionDate != null) {
+      body['transaction_date'] = transactionDate.toIso8601String();
+    }
+    return _request('POST', '/transactions', body: body);
+  }
+
   Future<Map<String, dynamic>> _request(String method, String endpoint, {Map<String, dynamic>? body}) async {
     final uri = Uri.parse('$_baseUrl$endpoint');
     final headers = {

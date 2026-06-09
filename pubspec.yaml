@@ -32,6 +32,12 @@ dependencies:
   # ── Google Fonts ────────────────────────────────────
   google_fonts: ^6.2.1
 
+  # ── SMS Interceptor & Local Cache ──────────────────
+  another_telephony: ^0.4.1
+  permission_handler: ^11.3.1
+  flutter_local_notifications: ^17.2.1
+  shared_preferences: ^2.3.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
