@@ -56,7 +56,7 @@ class _AuthScreenState extends State<AuthScreen>
     final auth = context.read<AuthProvider>();
     final success = await auth.authenticate();
     if (success && mounted) {
-      Navigator.of(context).pushReplacementNamed('/home');
+      Navigator.of(context).pushReplacementNamed('/loading');
     }
   }
 

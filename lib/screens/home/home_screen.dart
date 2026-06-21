@@ -20,6 +20,7 @@ import 'package:personal_finance_assistant/services/notification_service.dart';
 import 'package:personal_finance_assistant/screens/transactions/transaction_categorize_modal.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:personal_finance_assistant/core/services/sms_receiver_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -36,10 +37,6 @@ class _HomeScreenState extends State<HomeScreen> {
   );
 
   StreamSubscription<TransactionNotification>? _notificationSubscription;
-
-  /// Dynamic queue of unprocessed notifications (replaces the old mock handler)
-  final List<TransactionNotification> _pendingNotifications = [];
-  int _unreadCount = 0;
 
   Future<void> _requestPermissions() async {
     final statuses = await [
@@ -62,15 +59,11 @@ class _HomeScreenState extends State<HomeScreen> {
       _drainPendingTransaction();
     });
 
-    // Listen for incoming transaction notifications — queue them, don't auto-show
+    // Listen for incoming transaction notifications
     _notificationSubscription =
         NotificationService().onTransactionReceived.listen((notification) {
       if (mounted) {
-        setState(() {
-          _pendingNotifications.insert(0, notification);
-          _unreadCount++;
-        });
-        // Also auto-show the modal for foreground interceptions
+        context.read<DashboardProvider>().loadDashboard();
         _showTransactionCategorizeModal(context, notification);
       }
     });
@@ -81,10 +74,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _drainPendingTransaction() async {
     final pending = await SmsReceiverService.drainPendingNotification();
     if (pending != null && mounted) {
-      setState(() {
-        _pendingNotifications.insert(0, pending);
-        _unreadCount++;
-      });
+      context.read<DashboardProvider>().loadDashboard();
       _showTransactionCategorizeModal(context, pending);
     }
   }
@@ -97,10 +87,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _clearNotification(TransactionNotification notification) {
     if (!mounted) return;
-    setState(() {
-      _pendingNotifications.removeWhere((n) => n.upiRefId == notification.upiRefId);
-      _unreadCount = _pendingNotifications.length;
-    });
+    context.read<DashboardProvider>().loadDashboard();
   }
 
   void _showTransactionCategorizeModal(
@@ -129,49 +116,45 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: () => Navigator.of(context).pushNamed('/expenses'),
           ),
           // Dynamic notification badge — shows unread count from real SMS data
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.notifications_outlined),
-                onPressed: () {
-                  if (_pendingNotifications.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('No new transactions.'),
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
-                    return;
-                  }
-                  // Show the most recent real pending notification
-                  final latest = _pendingNotifications.first;
-                  _showTransactionCategorizeModal(context, latest);
-                },
-              ),
-              if (_unreadCount > 0)
-                Positioned(
-                  top: 6,
-                  right: 6,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFF43F5E),
-                      shape: BoxShape.circle,
-                    ),
-                    constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-                    child: Text(
-                      '$_unreadCount',
-                      style: GoogleFonts.inter(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
+          Consumer<DashboardProvider>(
+            builder: (context, dashboard, _) {
+              final uncategorizedCount = dashboard.recentTransactions.where((t) {
+                final cat = t.category.toLowerCase().trim();
+                return cat == 'uncategorized' || cat.isEmpty;
+              }).length;
+
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.notifications_outlined),
+                    onPressed: () => Navigator.of(context).pushNamed('/notifications'),
                   ),
-                ),
-            ],
+                  if (uncategorizedCount > 0)
+                    Positioned(
+                      top: 6,
+                      right: 6,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFF43F5E),
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                        child: Text(
+                          '$uncategorizedCount',
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
           const SizedBox(width: 8),
         ],
@@ -283,7 +266,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class _ICICICardStatusCard extends StatelessWidget {
+class _ICICICardStatusCard extends StatefulWidget {
   final bool isLoading;
   final CardModel? card;
   final NumberFormat currencyFormat;
@@ -295,6 +278,54 @@ class _ICICICardStatusCard extends StatelessWidget {
     required this.currencyFormat,
     required this.isDark,
   });
+
+  @override
+  State<_ICICICardStatusCard> createState() => _ICICICardStatusCardState();
+}
+
+class _ICICICardStatusCardState extends State<_ICICICardStatusCard> {
+  bool _isPaid = false;
+  late String _storageKey;
+
+  @override
+  void initState() {
+    super.initState();
+    _initStorageKeyAndLoad();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ICICICardStatusCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _initStorageKeyAndLoad();
+  }
+
+  void _initStorageKeyAndLoad() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final dueDate = _getNextDueDate(today);
+    final formattedDueDate = DateFormat('yyyy-MM-dd').format(dueDate);
+    _storageKey = 'card_statement_paid_$formattedDueDate';
+    _loadPaidState();
+  }
+
+  Future<void> _loadPaidState() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        _isPaid = prefs.getBool(_storageKey) ?? false;
+      });
+    }
+  }
+
+  Future<void> _togglePaidState(bool paid) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_storageKey, paid);
+    if (mounted) {
+      setState(() {
+        _isPaid = paid;
+      });
+    }
+  }
 
   DateTime _getNextDueDate(DateTime today) {
     final dateOnly = DateTime(today.year, today.month, today.day);
@@ -324,16 +355,61 @@ class _ICICICardStatusCard extends StatelessWidget {
     }
   }
 
+  void _showPaymentConfirmationDialog(double amount) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        if (_isPaid) {
+          return AlertDialog(
+            title: const Text('Statement Payment'),
+            content: const Text(
+              'This billing cycle statement has already been marked as paid. Would you like to mark it as unpaid?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+                child: const Text('No'),
+              ),
+              TextButton(
+                onPressed: () {
+                  _togglePaidState(false);
+                  Navigator.of(context).pop();
+                },
+                child: const Text('Yes'),
+              ),
+            ],
+          );
+        } else {
+          return AlertDialog(
+            title: const Text('Statement Payment Confirmation'),
+            content: const Text(
+              'Have you already cleared the due amount of ₹--,---.-- for this billing cycle?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+                child: const Text('No'),
+              ),
+              TextButton(
+                onPressed: () {
+                  _togglePaidState(true);
+                  Navigator.of(context).pop();
+                },
+                child: const Text('Yes'),
+              ),
+            ],
+          );
+        }
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final totalLimit = isLoading ? 0.0 : 90000.00;
-    final availableLimit = isLoading ? 0.0 : (card?.availableLimit ?? 90000.00);
-    final usedCredit = isLoading ? 0.0 : (totalLimit - availableLimit);
-    final usagePercent =
-        totalLimit > 0 ? (usedCredit / totalLimit).clamp(0.0, 1.0) : 0.0;
-
-    final statementDueAmount = usedCredit;
-
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final dueDate = _getNextDueDate(today);
@@ -341,138 +417,178 @@ class _ICICICardStatusCard extends StatelessWidget {
     
     final daysRemaining = dueDate.difference(today).inDays;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 24),
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.credit_card_rounded,
-                      color: isDark
-                          ? const Color(0xFF2DD4BF)
-                          : const Color(0xFF0D9488),
-                      size: 22,
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      'ICICI Card Status',
-                      style: GoogleFonts.inter(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: isDark ? Colors.white : const Color(0xFF1E293B),
+    return GestureDetector(
+      onTap: widget.isLoading ? null : () => _showPaymentConfirmationDialog(0.0),
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 24),
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.credit_card_rounded,
+                        color: widget.isDark
+                            ? const Color(0xFF2DD4BF)
+                            : const Color(0xFF0D9488),
+                        size: 22,
                       ),
+                      const SizedBox(width: 10),
+                      Text(
+                        'ICICI Card Status',
+                        style: GoogleFonts.inter(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: widget.isDark ? Colors.white : const Color(0xFF1E293B),
+                        ),
+                      ),
+                    ],
+                  ),
+                  _isPaid
+                      ? _buildPaidPill(dueDate, widget.isDark)
+                      : _buildAlertPill(daysRemaining, widget.isDark),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Used Credit',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: widget.isDark
+                          ? Colors.white.withValues(alpha: 0.6)
+                          : Colors.black.withValues(alpha: 0.6),
                     ),
-                  ],
-                ),
-                _buildAlertPill(daysRemaining, isDark),
-              ],
-            ),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Used Credit',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.6)
-                        : Colors.black.withValues(alpha: 0.6),
                   ),
-                ),
-                Text(
-                  '${currencyFormat.format(usedCredit)} / ${currencyFormat.format(totalLimit)}',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? Colors.white : Colors.black,
+                  Text(
+                    '₹--,---.-- / ₹--,---.--',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: widget.isDark ? Colors.white : Colors.black,
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: LinearProgressIndicator(
-                value: usagePercent,
-                minHeight: 8,
-                backgroundColor: isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.black.withValues(alpha: 0.05),
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  usagePercent > 0.8
-                      ? const Color(0xFFF43F5E)
-                      : usagePercent > 0.5
-                          ? const Color(0xFFF59E0B)
-                          : const Color(0xFF10B981),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: LinearProgressIndicator(
+                  value: 0.0,
+                  minHeight: 8,
+                  backgroundColor: widget.isDark
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : Colors.black.withValues(alpha: 0.05),
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    Color(0xFF10B981),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 20),
-            Divider(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : Colors.black.withValues(alpha: 0.05),
-              height: 1,
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Statement Due Amount',
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.6)
-                        : Colors.black.withValues(alpha: 0.6),
+              const SizedBox(height: 20),
+              Divider(
+                color: widget.isDark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.black.withValues(alpha: 0.05),
+                height: 1,
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Statement Due Amount',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: widget.isDark
+                          ? Colors.white.withValues(alpha: 0.6)
+                          : Colors.black.withValues(alpha: 0.6),
+                    ),
                   ),
-                ),
-                Text(
-                  currencyFormat.format(statementDueAmount),
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: isDark ? Colors.white : const Color(0xFF1E293B),
+                  Text(
+                    '₹--,---.--',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: widget.isDark ? Colors.white : const Color(0xFF1E293B),
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Due Date',
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.6)
-                        : Colors.black.withValues(alpha: 0.6),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Due Date',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: widget.isDark
+                          ? Colors.white.withValues(alpha: 0.6)
+                          : Colors.black.withValues(alpha: 0.6),
+                    ),
                   ),
-                ),
-                Text(
-                  formattedDueDate,
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: isDark ? Colors.white : const Color(0xFF1E293B),
+                  Text(
+                    formattedDueDate,
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: widget.isDark ? Colors.white : const Color(0xFF1E293B),
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildPaidPill(DateTime dueDate, bool isDark) {
+    final Color baseColor = const Color(0xFF10B981);
+    // final nextMonthDate = DateTime(dueDate.year, dueDate.month + 1, 15);
+    // final formattedNextDueDate = DateFormat('dd MMM yyyy').format(nextMonthDate);
+    // final label = 'Due next month ($formattedNextDueDate)';
+    final label = 'Due next month';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: baseColor.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: baseColor.withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.check_circle_rounded,
+            size: 12,
+            color: baseColor,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: baseColor,
+            ),
+          ),
+        ],
       ),
     );
   }

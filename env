@@ -1,19 +1,20 @@
 # ── Gmail IMAP ────────────────────────────────────────────────
 IMAP_HOST=imap.gmail.com
 IMAP_PORT=993
-IMAP_EMAIL=your_email_here
-IMAP_PASSWORD=your_password_here
+IMAP_EMAIL=harshit.bilagi@gmail.com
+IMAP_PASSWORD=xbqq wqvt nvdb sngp
 
 # ── Supabase ──────────────────────────────────────────────────
-SUPABASE_URL=your_supabase_url_here
-SUPABASE_KEY=your_supabase_token_here
+SUPABASE_URL=https://ydjcljiouvlwplcmdovt.supabase.co
+SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlkamNsamlvdXZsd3BsY21kb3Z0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODgxNjk2OSwiZXhwIjoyMDk0MzkyOTY5fQ.2oOyKxY9aI7YptE8V3DU8ahX2B3czneoYF3lVbj_ek0
 
 # ── Firebase (FCM) ────────────────────────────────────────────
-FIREBASE_CREDENTIALS_PATH=firebase_service_account.json
+FIREBASE_CREDENTIALS_PATH=./backend/firebase_service_account.json
 
-# ── Bank Alert Filters ──────────────────────────────────────
-IMAP_SEARCH_FROM=alerts@bank.com
+# ── ICICI Alert Filters ──────────────────────────────────────
+IMAP_SEARCH_FROM=credit_cards@icici.bank.in
+# IMAP_SEARCH_FROM=harshit.bilagi@gmail.com
 IMAP_SEARCH_SUBJECT=transaction
 
 # ── Scheduler ─────────────────────────────────────────────────
-EMAIL_CHECK_INTERVAL_MINUTES=10
+EMAIL_CHECK_INTERVAL_MINUTES=5

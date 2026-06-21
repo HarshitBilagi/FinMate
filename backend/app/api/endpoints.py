@@ -11,11 +11,17 @@ from app.schemas.api_schemas import (
     CategorizeTransactionResponse,
     IgnoreTransactionResponse,
     CreateTransactionRequest,
-    CreateTransactionResponse
+    CreateTransactionResponse,
+    TransactionListItem,
+    TransactionsListResponse
 )
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+@router.get("/health")
+def health_check():
+    return {"status": "ok"}
 
 # Basic dependency to get the current user device_id from headers.
 # Since we have biometric local auth, we'll identify users via device_id.
@@ -47,7 +53,8 @@ def get_dashboard_summary(device_id: str = Depends(get_device_id)):
             
             return DashboardSummaryResponse(
                 total_balance=45320.50,
-                remaining_limit=156780.00,
+                total_limit=90000.00,
+                remaining_limit=90000.00,
                 next_bill_date=next_bill,
                 days_until_due=(due_date - today).days
             )
@@ -90,7 +97,8 @@ def get_dashboard_summary(device_id: str = Depends(get_device_id)):
         
         return DashboardSummaryResponse(
             total_balance=total_balance,
-            remaining_limit=card.get('available_limit', 0.0),
+            total_limit=90000.00,
+            remaining_limit=float(card.get('available_limit', 0.0)),
             next_bill_date=next_bill,
             days_until_due=days_until_due
         )
@@ -195,8 +203,8 @@ def create_transaction(
                 "user_id": user_id,
                 "card_masked": request.card_masked,
                 "card_type": "credit_card",
-                "total_limit": 200000.00,
-                "available_limit": 200000.00,
+                "total_limit": 90000.00,
+                "available_limit": 90000.00,
                 "billing_cycle_day": 15
             }
             card_res = supabase.table("cards").insert(card_data).execute()
@@ -229,7 +237,7 @@ def create_transaction(
             if not txn_res.data:
                 raise HTTPException(status_code=500, detail="Failed to insert transaction")
                 
-            new_limit = max(0.0, current_limit - request.amount)
+            new_limit = current_limit - request.amount
             supabase.table("cards").update({"available_limit": new_limit}).eq("id", card_id).execute()
             
             created_txn = txn_res.data[0]
@@ -257,3 +265,57 @@ def create_transaction(
     except Exception as e:
         logger.error(f"Error creating transaction: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/transactions", response_model=TransactionsListResponse)
+def get_transactions(device_id: str = Depends(get_device_id)):
+    """
+    Returns a list of all transactions for the user's card(s).
+    """
+    supabase = get_supabase_client()
+    try:
+        # Find user by device_id
+        user_res = supabase.table("users").select("id").eq("device_id", device_id).execute()
+        if not user_res.data:
+            return TransactionsListResponse(transactions=[], count=0)
+            
+        user_id = user_res.data[0]['id']
+        
+        # Get user's card(s)
+        cards_res = supabase.table("cards").select("id").eq("user_id", user_id).execute()
+        if not cards_res.data:
+            return TransactionsListResponse(transactions=[], count=0)
+            
+        card_ids = [card['id'] for card in cards_res.data]
+        
+        # Get all transactions for these card(s)
+        txns_res = supabase.table("transactions").select("*").in_("card_id", card_ids).order("transacted_at", desc=True).execute()
+        
+        transactions = []
+        for txn in txns_res.data:
+            transacted_at_val = txn.get('transacted_at')
+            if isinstance(transacted_at_val, (datetime, date)):
+                transacted_at_val = transacted_at_val.isoformat()
+            
+            transactions.append(
+                TransactionListItem(
+                    id=str(txn['id']),
+                    card_id=str(txn['card_id']),
+                    upi_ref_id=str(txn['upi_ref_id']),
+                    amount=float(txn['amount']),
+                    merchant=txn.get('merchant'),
+                    category=txn.get('category', 'uncategorized'),
+                    transaction_type=txn.get('transaction_type', 'debit'),
+                    is_refund=bool(txn.get('is_refund', False)),
+                    source=txn.get('source', 'email'),
+                    transacted_at=str(transacted_at_val)
+                )
+            )
+            
+        return TransactionsListResponse(
+            transactions=transactions,
+            count=len(transactions)
+        )
+        
+    except Exception as e:
+        logger.error(f"Error fetching transactions: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")

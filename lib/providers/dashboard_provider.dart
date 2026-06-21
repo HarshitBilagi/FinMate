@@ -46,8 +46,9 @@ class DashboardProvider extends ChangeNotifier {
     try {
       final summary = await _apiClient.fetchDashboardSummary();
       
-      _savingsBalance = summary['total_balance'] ?? 0.0;
-      final remainingLimit = summary['remaining_limit'] ?? 0.0;
+      _savingsBalance = (summary['total_balance'] ?? 0.0).toDouble();
+      final remainingLimit = (summary['remaining_limit'] ?? 0.0).toDouble();
+      final totalLimit = (summary['total_limit'] ?? 90000.00).toDouble();
       final nextBillDate = DateTime.parse(summary['next_bill_date']);
       
       // Update cards based on summary
@@ -58,7 +59,7 @@ class DashboardProvider extends ChangeNotifier {
             userId: 'user-001',
             cardMasked: 'XX4326',
             cardType: 'credit_card',
-            totalLimit: 200000.00,
+            totalLimit: totalLimit,
             availableLimit: remainingLimit,
             billingCycleDay: nextBillDate.day,
           ),
@@ -69,14 +70,23 @@ class DashboardProvider extends ChangeNotifier {
             userId: _cards[0].userId,
             cardMasked: _cards[0].cardMasked,
             cardType: _cards[0].cardType,
-            totalLimit: _cards[0].totalLimit,
+            totalLimit: totalLimit,
             availableLimit: remainingLimit,
             billingCycleDay: nextBillDate.day,
         );
       }
 
-      // Recent transactions are populated by real SMS interceptions only.
-      // No mock seeding — the UI handles empty state gracefully.
+      // Populate recent transactions from the backend
+      final txnData = await _apiClient.fetchTransactions();
+      final List<dynamic> txList = txnData['transactions'] ?? [];
+      final parsedTransactionsList = txList
+          .map((jsonTx) => Transaction.fromJson(jsonTx as Map<String, dynamic>))
+          .toList();
+
+      _recentTransactions.clear();
+      _recentTransactions.addAll(parsedTransactionsList);
+
+      debugPrint('[API READ] Boot initialization fetched ${parsedTransactionsList.length} total history rows.');
     } on FinanceApiException catch (e) {
       _errorMessage = e.message;
     } catch (e) {

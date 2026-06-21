@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
 
 class FinanceApiException implements Exception {
   final String message;
@@ -17,7 +18,7 @@ class FinanceApiClient {
   // Use 10.0.2.2 for Android emulator testing against local backend
   // In production, this would be your remote backend URL
   static const String _baseUrl = 'https://finmate-backend-34vb.onrender.com';
-  static const Duration _timeout = Duration(seconds: 10);
+  static const Duration _timeout = Duration(seconds: 60);
   
   // For the MVP, we use a dummy device ID to identify the user
   static const String _deviceId = 'dev-device-123';
@@ -26,9 +27,25 @@ class FinanceApiClient {
 
   FinanceApiClient({http.Client? client}) : _client = client ?? http.Client();
 
+  /// Checks the backend health status to wake up the container.
+  Future<bool> checkBackendHealth() async {
+    try {
+      final response = await _request('GET', '/health');
+      return response['status'] == 'ok' || response['status'] == 'healthy';
+    } catch (e) {
+      debugPrint('[API HEALTH] Health check ping failed: $e');
+      return false;
+    }
+  }
+
   /// Fetches the dashboard summary metrics.
   Future<Map<String, dynamic>> fetchDashboardSummary() async {
     return _request('GET', '/dashboard/summary');
+  }
+
+  /// Fetches all transactions from the backend.
+  Future<Map<String, dynamic>> fetchTransactions() async {
+    return _request('GET', '/transactions');
   }
 
   /// Categorizes a transaction on the backend.
@@ -59,18 +76,61 @@ class FinanceApiClient {
     String source = 'sms',
     DateTime? transactionDate,
   }) async {
-    final body = <String, dynamic>{
+    final payload = <String, dynamic>{
       'upi_ref_id': upiRefId,
       'amount': amount,
       'merchant': merchant,
       'card_masked': cardMasked,
       'raw_message': rawMessage,
       'source': source,
+      'transaction_type': 'debit',
     };
     if (transactionDate != null) {
-      body['transaction_date'] = transactionDate.toIso8601String();
+      payload['transaction_date'] = transactionDate.toIso8601String();
     }
-    return _request('POST', '/transactions', body: body);
+
+    // Structural elements validation check
+    final String? checkCardId = cardMasked.isEmpty ? null : cardMasked;
+    final double checkAmount = amount;
+    final String? checkMerchant = merchant.isEmpty ? null : merchant;
+    const String checkTxnType = 'debit';
+    final String? checkUpiRefId = upiRefId.isEmpty ? null : upiRefId;
+
+    if (checkCardId == null ||
+        checkAmount <= 0 ||
+        checkMerchant == null ||
+        checkUpiRefId == null) {
+      debugPrint('[CRITICAL VALIDATION ALERT] Missing or empty structural elements required by backend schema: card_id/card_masked = $checkCardId, amount = $checkAmount, merchant = $checkMerchant, transaction_type = $checkTxnType, upi_ref_id = $checkUpiRefId');
+    }
+
+    debugPrint('[API WRITE] Sending transaction payload to Render: ${jsonEncode(payload)}');
+
+    try {
+      final uri = Uri.parse('$_baseUrl/transactions');
+      final headers = {
+        'Content-Type': 'application/json',
+        'x-device-id': _deviceId,
+      };
+
+      final response = await _client
+          .post(uri, headers: headers, body: jsonEncode(payload))
+          .timeout(_timeout);
+
+      debugPrint('[API WRITE RESPONSE] Server responded with status code: ${response.statusCode}');
+      debugPrint('[API WRITE BODY] Server payload body: ${response.body}');
+
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        throw FinanceApiException(
+          'Failed to create transaction: Server responded with status code ${response.statusCode}',
+          response.statusCode,
+        );
+      }
+
+      return _handleResponse(response);
+    } catch (e) {
+      debugPrint('[API WRITE ERROR] Failed writing transaction payload to Render: $e');
+      rethrow;
+    }
   }
 
   Future<Map<String, dynamic>> _request(String method, String endpoint, {Map<String, dynamic>? body}) async {

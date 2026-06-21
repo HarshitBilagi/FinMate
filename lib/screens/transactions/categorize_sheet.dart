@@ -17,16 +17,17 @@ class CategorizeSheet extends StatelessWidget {
   const CategorizeSheet({super.key, required this.transaction});
 
   static const _categories = [
-    _CategoryOption('food', Icons.restaurant_outlined, Color(0xFFEF4444)),
-    _CategoryOption('shopping', Icons.shopping_bag_outlined, Color(0xFF8B5CF6)),
-    _CategoryOption('transport', Icons.directions_car_outlined, Color(0xFF3B82F6)),
-    _CategoryOption('entertainment', Icons.movie_outlined, Color(0xFFEC4899)),
-    _CategoryOption('bills', Icons.receipt_long_outlined, Color(0xFFF97316)),
-    _CategoryOption('health', Icons.medical_services_outlined, Color(0xFF14B8A6)),
-    _CategoryOption('education', Icons.school_outlined, Color(0xFF6366F1)),
-    _CategoryOption('travel', Icons.flight_outlined, Color(0xFF0EA5E9)),
-    _CategoryOption('groceries', Icons.local_grocery_store_outlined, Color(0xFF22C55E)),
-    _CategoryOption('fuel', Icons.local_gas_station_outlined, Color(0xFF78716C)),
+    _CategoryOption('rent', Icons.home_outlined, Color(0xFFEF4444)),
+    _CategoryOption('whey protein', Icons.fitness_center_outlined, Color(0xFF6366F1)),
+    _CategoryOption('eggs', Icons.egg_outlined, Color(0xFFF59E0B)),
+    _CategoryOption('sip', Icons.trending_up_outlined, Color(0xFF10B981)),
+    _CategoryOption('stocks', Icons.show_chart_outlined, Color(0xFF22C55E)),
+    _CategoryOption('gym fees', Icons.sports_gymnastics_outlined, Color(0xFF0EA5E9)),
+    _CategoryOption('beverages', Icons.local_cafe_outlined, Color(0xFFEC4899)),
+    _CategoryOption('outside food', Icons.restaurant_outlined, Color(0xFFF97316)),
+    _CategoryOption('subscriptions', Icons.subscriptions_outlined, Color(0xFF78716C)),
+    _CategoryOption('groceries', Icons.local_grocery_store_outlined, Color(0xFF84CC16)),
+    _CategoryOption('transportion', Icons.directions_car_outlined, Color(0xFF3B82F6)),
   ];
 
   @override
@@ -118,10 +119,10 @@ class CategorizeSheet extends StatelessWidget {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 5,
-                childAspectRatio: 0.85,
+                crossAxisCount: 3,
+                childAspectRatio: 1.5,
                 crossAxisSpacing: 8,
-                mainAxisSpacing: 12,
+                mainAxisSpacing: 8,
               ),
               itemCount: _categories.length,
               itemBuilder: (context, index) {
@@ -149,12 +150,12 @@ class CategorizeSheet extends StatelessWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(cat.icon, color: cat.color, size: 24),
-                        const SizedBox(height: 4),
+                        Icon(cat.icon, color: cat.color, size: 20),
+                        const SizedBox(height: 6),
                         Text(
-                          cat.name[0].toUpperCase() + cat.name.substring(1),
+                          cat.name.split(' ').map((word) => word.toLowerCase() == 'sip' ? 'SIP' : (word[0].toUpperCase() + word.substring(1).toLowerCase())).join(' '),
                           style: GoogleFonts.inter(
-                            fontSize: 10,
+                            fontSize: 11,
                             fontWeight: FontWeight.w600,
                             color: cat.color,
                           ),

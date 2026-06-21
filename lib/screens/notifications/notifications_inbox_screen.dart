@@ -1,37 +1,14 @@
-/// Full transactions list screen.
-///
-/// Shows all transactions with category filtering and
-/// categorize bottom sheet access.
-library;
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:personal_finance_assistant/providers/dashboard_provider.dart';
-import 'package:personal_finance_assistant/screens/transactions/categorize_sheet.dart';
 import 'package:personal_finance_assistant/models/transaction.dart';
+import 'package:personal_finance_assistant/services/notification_service.dart';
+import 'package:personal_finance_assistant/screens/transactions/transaction_categorize_modal.dart';
 
-class TransactionsScreen extends StatelessWidget {
-  const TransactionsScreen({super.key});
-
-  Color _categoryColor(String category) {
-    return switch (category.toLowerCase().trim()) {
-      'rent' => const Color(0xFFEF4444),
-      'whey protein' => const Color(0xFF6366F1),
-      'eggs' => const Color(0xFFF59E0B),
-      'sip' => const Color(0xFF10B981),
-      'stocks' => const Color(0xFF22C55E),
-      'gym fees' => const Color(0xFF0EA5E9),
-      'beverages' => const Color(0xFFEC4899),
-      'outside food' => const Color(0xFFF97316),
-      'subscriptions' => const Color(0xFF78716C),
-      'groceries' => const Color(0xFF84CC16),
-      'transportion' || 'transportation' || 'transport' => const Color(0xFF3B82F6),
-      'ignored' => Colors.grey,
-      _ => const Color(0xFF94A3B8), // uncategorized
-    };
-  }
+class NotificationsInboxScreen extends StatelessWidget {
+  const NotificationsInboxScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -44,7 +21,7 @@ class TransactionsScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Transaction Ledger'),
+        title: const Text('Uncategorized Inbox'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, size: 20),
           onPressed: () => Navigator.of(context).pop(),
@@ -52,15 +29,18 @@ class TransactionsScreen extends StatelessWidget {
       ),
       body: Consumer<DashboardProvider>(
         builder: (context, dashboard, _) {
-          final transactions = dashboard.recentTransactions;
+          final uncategorizedTransactions = dashboard.recentTransactions.where((t) {
+            final cat = t.category.toLowerCase().trim();
+            return cat == 'uncategorized' || cat.isEmpty;
+          }).toList();
 
-          if (transactions.isEmpty) {
+          if (uncategorizedTransactions.isEmpty) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(
-                    Icons.receipt_long_outlined,
+                    Icons.mark_email_read_outlined,
                     size: 64,
                     color: isDark
                         ? Colors.white.withValues(alpha: 0.2)
@@ -68,9 +48,9 @@ class TransactionsScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'No transactions yet',
+                    'Inbox clear! No uncategorized transactions.',
                     style: GoogleFonts.inter(
-                      fontSize: 16,
+                      fontSize: 14,
                       fontWeight: FontWeight.w500,
                       color: isDark
                           ? Colors.white.withValues(alpha: 0.4)
@@ -85,12 +65,12 @@ class TransactionsScreen extends StatelessWidget {
           return ListView.builder(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             physics: const BouncingScrollPhysics(),
-            itemCount: transactions.length,
+            itemCount: uncategorizedTransactions.length,
             itemBuilder: (context, index) {
-              final txn = transactions[index];
+              final txn = uncategorizedTransactions[index];
               return GestureDetector(
-                onTap: () => _showCategorizeSheet(context, txn),
-                child: _buildLedgerRow(context, txn, currencyFormat),
+                onTap: () => _showCategorizeModal(context, txn),
+                child: _buildInboxRow(context, txn, currencyFormat),
               );
             },
           );
@@ -99,14 +79,11 @@ class TransactionsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildLedgerRow(
+  Widget _buildInboxRow(
       BuildContext context, Transaction txn, NumberFormat currencyFormat) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
     final dateStr = DateFormat('dd MMM yyyy').format(txn.transactedAt);
     final timeStr = DateFormat('hh:mm a').format(txn.transactedAt);
-    final categoryStr = txn.category.split(' ').map((word) => word.toLowerCase() == 'sip' ? 'SIP' : (word[0].toUpperCase() + word.substring(1).toLowerCase())).join(' ');
-    final categoryColor = _categoryColor(txn.category);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -171,20 +148,12 @@ class TransactionsScreen extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: categoryColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    categoryStr,
-                    style: GoogleFonts.inter(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: categoryColor,
-                    ),
+                Text(
+                  'Uncategorized',
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: const Color(0xFFF59E0B),
                   ),
                 ),
               ],
@@ -203,11 +172,28 @@ class TransactionsScreen extends StatelessWidget {
     );
   }
 
-  void _showCategorizeSheet(BuildContext context, Transaction txn) {
+  void _showCategorizeModal(BuildContext context, Transaction txn) {
+    final notification = TransactionNotification(
+      transactionId: txn.id,
+      amount: txn.amount.toString(),
+      merchant: txn.merchant ?? 'Unknown',
+      cardMasked: '',
+      upiRefId: txn.upiRefId,
+      action: 'categorize',
+      transactionDate: txn.transactedAt,
+    );
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (_) => CategorizeSheet(transaction: txn),
+      backgroundColor: Colors.transparent,
+      builder: (_) => TransactionCategorizeModal(
+        notification: notification,
+        onDismiss: () {
+          // Trigger a refresh/rebuild
+          context.read<DashboardProvider>().loadDashboard();
+        },
+      ),
     );
   }
 }

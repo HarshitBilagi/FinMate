@@ -17,17 +17,24 @@ class ExpensesScreen extends StatelessWidget {
 
   String _capitalize(String name) {
     if (name.isEmpty) return name;
-    return name[0].toUpperCase() + name.substring(1);
+    return name.split(' ').map((word) {
+      if (word.isEmpty) return '';
+      return word[0].toUpperCase() + word.substring(1).toLowerCase();
+    }).join(' ');
   }
 
   Color _getMacroColorForCategory(String category) {
-    switch (category.toLowerCase()) {
-      case 'education':
+    switch (category.toLowerCase().trim()) {
+      case 'sip':
+      case 'stocks':
         return const Color(0xFF10B981); // Investments - Emerald
-      case 'bills':
-      case 'health':
+      case 'rent':
+      case 'whey protein':
+      case 'eggs':
+      case 'gym fees':
       case 'groceries':
-      case 'fuel':
+      case 'transportion':
+      case 'transportation':
       case 'transport':
         return const Color(0xFF6366F1); // Fixed/Health - Indigo
       default:
@@ -58,24 +65,26 @@ class ExpensesScreen extends StatelessWidget {
 
           // 1. Initialize category totals (11 individual categories explicitly)
           final categoryTotals = <String, double>{
-            'food': 0.0,
-            'shopping': 0.0,
-            'transport': 0.0,
-            'entertainment': 0.0,
-            'bills': 0.0,
-            'health': 0.0,
-            'education': 0.0,
-            'travel': 0.0,
+            'rent': 0.0,
+            'whey protein': 0.0,
+            'eggs': 0.0,
+            'sip': 0.0,
+            'stocks': 0.0,
+            'gym fees': 0.0,
+            'beverages': 0.0,
+            'outside food': 0.0,
+            'subscriptions': 0.0,
             'groceries': 0.0,
-            'fuel': 0.0,
+            'transportion': 0.0,
             'uncategorized': 0.0,
           };
 
           double totalOutflow = 0.0;
           for (final txn in transactions) {
-            final cat = txn.category.toLowerCase();
-            if (categoryTotals.containsKey(cat)) {
-              categoryTotals[cat] = categoryTotals[cat]! + txn.amount;
+            final cat = txn.category.toLowerCase().trim();
+            final resolvedCat = (cat == 'transportation' || cat == 'transport') ? 'transportion' : cat;
+            if (categoryTotals.containsKey(resolvedCat)) {
+              categoryTotals[resolvedCat] = categoryTotals[resolvedCat]! + txn.amount;
               totalOutflow += txn.amount;
             } else {
               categoryTotals['uncategorized'] =
@@ -85,18 +94,18 @@ class ExpensesScreen extends StatelessWidget {
           }
 
           // 2. Aggregate into the 3 defined Macro Groups
-          final double investmentsTotal = categoryTotals['education']!;
+          final double investmentsTotal = categoryTotals['sip']! + categoryTotals['stocks']!;
 
-          final double fixedHealthTotal = categoryTotals['bills']! +
-              categoryTotals['health']! +
+          final double fixedHealthTotal = categoryTotals['rent']! +
+              categoryTotals['whey protein']! +
+              categoryTotals['eggs']! +
+              categoryTotals['gym fees']! +
               categoryTotals['groceries']! +
-              categoryTotals['fuel']! +
-              categoryTotals['transport']!;
+              categoryTotals['transportion']!;
 
-          final double variablesTotal = categoryTotals['food']! +
-              categoryTotals['shopping']! +
-              categoryTotals['entertainment']! +
-              categoryTotals['travel']! +
+          final double variablesTotal = categoryTotals['beverages']! +
+              categoryTotals['outside food']! +
+              categoryTotals['subscriptions']! +
               categoryTotals['uncategorized']!;
 
           return ListView(

@@ -17,6 +17,7 @@ import 'package:personal_finance_assistant/core/routes/app_routes.dart';
 import 'package:personal_finance_assistant/providers/auth_provider.dart';
 import 'package:personal_finance_assistant/providers/dashboard_provider.dart';
 import 'package:personal_finance_assistant/core/services/sms_receiver_service.dart';
+import 'package:personal_finance_assistant/services/finance_api_client.dart';
 // Firebase imports — uncomment when google-services.json is configured:
 // import 'package:firebase_core/firebase_core.dart';
 // import 'package:personal_finance_assistant/services/notification_service.dart';
@@ -55,18 +56,27 @@ void main() async {
   await SmsReceiverService.initialize();
   await SmsReceiverService.startListening();
 
-  runApp(const FinanceFriendApp());
+  // [Cold Boot] Initiate a lightweight health check to wake up the Render container
+  // with minimal payload weight during biometrics.
+  debugPrint('[Cold Boot] Initiating container wake-up via checkBackendHealth() — Render container wake-up initiated.');
+  FinanceApiClient().checkBackendHealth();
+
+  final dashboardProvider = DashboardProvider();
+
+  runApp(FinanceFriendApp(dashboardProvider: dashboardProvider));
 }
 
 class FinanceFriendApp extends StatelessWidget {
-  const FinanceFriendApp({super.key});
+  final DashboardProvider dashboardProvider;
+
+  const FinanceFriendApp({super.key, required this.dashboardProvider});
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
-        ChangeNotifierProvider(create: (_) => DashboardProvider()),
+        ChangeNotifierProvider.value(value: dashboardProvider),
       ],
       child: MaterialApp(
         title: 'Finance Friend',

@@ -2,6 +2,5 @@ fastapi[standard]
 pydantic
 pydantic-settings
 apscheduler
-supabase==2.29.0
+supabase==2.22.4
 python-dotenv
-firebase-admin

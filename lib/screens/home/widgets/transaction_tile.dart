@@ -115,33 +115,35 @@ class TransactionTile extends StatelessWidget {
   }
 
   IconData _categoryIcon(String category) {
-    return switch (category) {
-      'food' => Icons.restaurant_outlined,
-      'shopping' => Icons.shopping_bag_outlined,
-      'transport' => Icons.directions_car_outlined,
-      'entertainment' => Icons.movie_outlined,
-      'bills' => Icons.receipt_long_outlined,
-      'health' => Icons.medical_services_outlined,
-      'education' => Icons.school_outlined,
-      'travel' => Icons.flight_outlined,
+    return switch (category.toLowerCase().trim()) {
+      'rent' => Icons.home_outlined,
+      'whey protein' => Icons.fitness_center_outlined,
+      'eggs' => Icons.egg_outlined,
+      'sip' => Icons.trending_up_outlined,
+      'stocks' => Icons.show_chart_outlined,
+      'gym fees' => Icons.sports_gymnastics_outlined,
+      'beverages' => Icons.local_cafe_outlined,
+      'outside food' => Icons.restaurant_outlined,
+      'subscriptions' => Icons.subscriptions_outlined,
       'groceries' => Icons.local_grocery_store_outlined,
-      'fuel' => Icons.local_gas_station_outlined,
+      'transportion' || 'transportation' || 'transport' => Icons.directions_car_outlined,
       _ => Icons.help_outline,
     };
   }
 
   Color _categoryColor(String category) {
-    return switch (category) {
-      'food' => const Color(0xFFEF4444),
-      'shopping' => const Color(0xFF8B5CF6),
-      'transport' => const Color(0xFF3B82F6),
-      'entertainment' => const Color(0xFFEC4899),
-      'bills' => const Color(0xFFF97316),
-      'health' => const Color(0xFF14B8A6),
-      'education' => const Color(0xFF6366F1),
-      'travel' => const Color(0xFF0EA5E9),
-      'groceries' => const Color(0xFF22C55E),
-      'fuel' => const Color(0xFF78716C),
+    return switch (category.toLowerCase().trim()) {
+      'rent' => const Color(0xFFEF4444),
+      'whey protein' => const Color(0xFF6366F1),
+      'eggs' => const Color(0xFFF59E0B),
+      'sip' => const Color(0xFF10B981),
+      'stocks' => const Color(0xFF22C55E),
+      'gym fees' => const Color(0xFF0EA5E9),
+      'beverages' => const Color(0xFFEC4899),
+      'outside food' => const Color(0xFFF97316),
+      'subscriptions' => const Color(0xFF78716C),
+      'groceries' => const Color(0xFF84CC16),
+      'transportion' || 'transportation' || 'transport' => const Color(0xFF3B82F6),
       _ => const Color(0xFF94A3B8),
     };
   }

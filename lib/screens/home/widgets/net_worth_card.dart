@@ -73,7 +73,7 @@ class NetWorthCard extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           Text(
-            currencyFormat.format(netWorth),
+            '₹--,---.--',
             style: GoogleFonts.inter(
               fontSize: 36,
               fontWeight: FontWeight.w800,
@@ -87,13 +87,13 @@ class NetWorthCard extends StatelessWidget {
               _BreakdownItem(
                 icon: Icons.savings_outlined,
                 label: 'Savings',
-                value: currencyFormat.format(savings),
+                value: '₹--,---.--',
               ),
               const SizedBox(width: 24),
               _BreakdownItem(
                 icon: Icons.credit_card_outlined,
                 label: 'Credit Available',
-                value: currencyFormat.format(availableCredit),
+                value: '₹--,---.--',
               ),
             ],
           ),

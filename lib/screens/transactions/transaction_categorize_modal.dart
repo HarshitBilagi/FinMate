@@ -28,20 +28,18 @@ class _TransactionCategorizeModalState
   String? _selectedCategory;
 
   static const _categories = [
-    _CategoryOption('food', Icons.restaurant_outlined, Color(0xFFEF4444)),
-    _CategoryOption('shopping', Icons.shopping_bag_outlined, Color(0xFF8B5CF6)),
-    _CategoryOption(
-        'transport', Icons.directions_car_outlined, Color(0xFF3B82F6)),
-    _CategoryOption('entertainment', Icons.movie_outlined, Color(0xFFEC4899)),
-    _CategoryOption('bills', Icons.receipt_long_outlined, Color(0xFFF97316)),
-    _CategoryOption('health', Icons.medical_services_outlined, Color(0xFF14B8A6)),
-    _CategoryOption('education', Icons.school_outlined, Color(0xFF6366F1)),
-    _CategoryOption('travel', Icons.flight_outlined, Color(0xFF0EA5E9)),
-    _CategoryOption(
-        'groceries', Icons.local_grocery_store_outlined, Color(0xFF22C55E)),
-    _CategoryOption('fuel', Icons.local_gas_station_outlined, Color(0xFF78716C)),
-    _CategoryOption(
-        'uncategorized', Icons.help_outline_outlined, Color(0xFF94A3B8)),
+    _CategoryOption('rent', Icons.home_outlined, Color(0xFFEF4444)),
+    _CategoryOption('whey protein', Icons.fitness_center_outlined, Color(0xFF6366F1)),
+    _CategoryOption('eggs', Icons.egg_outlined, Color(0xFFF59E0B)),
+    _CategoryOption('sip', Icons.trending_up_outlined, Color(0xFF10B981)),
+    _CategoryOption('stocks', Icons.show_chart_outlined, Color(0xFF22C55E)),
+    _CategoryOption('gym fees', Icons.sports_gymnastics_outlined, Color(0xFF0EA5E9)),
+    _CategoryOption('beverages', Icons.local_cafe_outlined, Color(0xFFEC4899)),
+    _CategoryOption('outside food', Icons.restaurant_outlined, Color(0xFFF97316)),
+    _CategoryOption('subscriptions', Icons.subscriptions_outlined, Color(0xFF78716C)),
+    _CategoryOption('groceries', Icons.local_grocery_store_outlined, Color(0xFF84CC16)),
+    _CategoryOption('transportion', Icons.directions_car_outlined, Color(0xFF3B82F6)),
+    _CategoryOption('uncategorized', Icons.help_outline_outlined, Color(0xFF94A3B8)),
   ];
 
   @override
@@ -203,7 +201,7 @@ class _TransactionCategorizeModalState
                         const SizedBox(width: 6),
                         Flexible(
                           child: Text(
-                            cat.name[0].toUpperCase() + cat.name.substring(1),
+                            cat.name.split(' ').map((word) => word.toLowerCase() == 'sip' ? 'SIP' : (word[0].toUpperCase() + word.substring(1).toLowerCase())).join(' '),
                             style: GoogleFonts.inter(
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
@@ -277,7 +275,7 @@ class _TransactionCategorizeModalState
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
-                            'Transaction added to ${categoryToUse[0].toUpperCase() + categoryToUse.substring(1)}.'),
+                            'Transaction added to ${categoryToUse.split(' ').map((word) => word.toLowerCase() == 'sip' ? 'SIP' : (word[0].toUpperCase() + word.substring(1).toLowerCase())).join(' ')}.'),
                         backgroundColor: const Color(0xFF10B981),
                         duration: const Duration(seconds: 2),
                       ),

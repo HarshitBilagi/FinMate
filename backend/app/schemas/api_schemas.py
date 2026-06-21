@@ -1,9 +1,10 @@
 from pydantic import BaseModel
-from typing import Optional
-from datetime import date
+from typing import Optional, List
+from datetime import date, datetime
 
 class DashboardSummaryResponse(BaseModel):
     total_balance: float
+    total_limit: float
     remaining_limit: float
     next_bill_date: date
     days_until_due: int
@@ -37,3 +38,19 @@ class CreateTransactionResponse(BaseModel):
     merchant: str
     card_masked: str
     message: str
+
+class TransactionListItem(BaseModel):
+    id: str
+    card_id: str
+    upi_ref_id: str
+    amount: float
+    merchant: Optional[str] = None
+    category: str = "uncategorized"
+    transaction_type: str = "debit"
+    is_refund: bool = False
+    source: str = "email"
+    transacted_at: str
+
+class TransactionsListResponse(BaseModel):
+    transactions: List[TransactionListItem]
+    count: int

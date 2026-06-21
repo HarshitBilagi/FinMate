@@ -298,6 +298,9 @@ class SmsReceiverService {
 
   /// Write the transaction to the backend, fallback to SharedPreferences cache if offline
   static Future<void> saveTransactionToBackendOrCache(TransactionNotification txn, String rawMessage) async {
+    // 1. Immediately cache the transaction locally to ensure offline session caching persists instantly
+    await _cacheTransactionLocally(txn, rawMessage);
+
     try {
       final client = FinanceApiClient();
       await client.createTransaction(
@@ -309,10 +312,12 @@ class SmsReceiverService {
         source: 'sms',
         transactionDate: txn.transactionDate,
       );
-      debugPrint('[SMS Background] Transaction written to backend: ${txn.upiRefId}');
+      // 2. Remove the transaction from the cache now that the write request succeeded
+      await _removeTransactionFromCache(txn.upiRefId);
+      debugPrint('[SMS Background] Transaction written to backend and removed from cache: ${txn.upiRefId}');
     } catch (e) {
-      debugPrint('[SMS Background] Failed to write to backend: $e. Caching offline.');
-      await _cacheTransactionLocally(txn, rawMessage);
+      debugPrint('[SMS Background] Failed to write to backend: $e. Transaction remains in local cache.');
+      // Do NOT remove from the local cache if a TimeoutException or any other error/status failure occurs.
     }
   }
 
@@ -322,20 +327,44 @@ class SmsReceiverService {
       final prefs = await SharedPreferences.getInstance();
       final cachedStr = prefs.getString('offline_transactions_cache') ?? '[]';
       final List<dynamic> list = jsonDecode(cachedStr);
-      list.add({
-        'upi_ref_id': txn.upiRefId,
-        'amount': txn.amount,
-        'merchant': txn.merchant,
-        'card_masked': txn.cardMasked,
-        'raw_message': rawMessage,
-        'transaction_id': txn.transactionId,
-        'action': txn.action,
-        'transaction_date': txn.transactionDate?.toIso8601String(),
-      });
-      await prefs.setString('offline_transactions_cache', jsonEncode(list));
-      debugPrint('[SMS Cache] Cached transaction locally: ${txn.upiRefId}');
+      
+      // Check if the UPI Ref ID already exists in the cache to avoid duplicates
+      final exists = list.any((item) => item['upi_ref_id'] == txn.upiRefId);
+      if (!exists) {
+        list.add({
+          'upi_ref_id': txn.upiRefId,
+          'amount': txn.amount,
+          'merchant': txn.merchant,
+          'card_masked': txn.cardMasked,
+          'raw_message': rawMessage,
+          'transaction_id': txn.transactionId,
+          'action': txn.action,
+          'transaction_date': txn.transactionDate?.toIso8601String(),
+        });
+        await prefs.setString('offline_transactions_cache', jsonEncode(list));
+        debugPrint('[SMS Cache] Cached transaction locally: ${txn.upiRefId}');
+      } else {
+        debugPrint('[SMS Cache] Transaction already cached: ${txn.upiRefId}');
+      }
     } catch (e) {
       debugPrint('[SMS Cache] Error caching transaction: $e');
+    }
+  }
+
+  /// Remove a transaction from SharedPreferences cache once synced successfully
+  static Future<void> _removeTransactionFromCache(String upiRefId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cachedStr = prefs.getString('offline_transactions_cache') ?? '[]';
+      final List<dynamic> list = jsonDecode(cachedStr);
+      final initialLength = list.length;
+      list.removeWhere((item) => item['upi_ref_id'] == upiRefId);
+      if (list.length < initialLength) {
+        await prefs.setString('offline_transactions_cache', jsonEncode(list));
+        debugPrint('[SMS Cache] Removed transaction from cache: $upiRefId');
+      }
+    } catch (e) {
+      debugPrint('[SMS Cache] Error removing transaction from cache: $e');
     }
   }
 
