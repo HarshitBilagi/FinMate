@@ -113,7 +113,7 @@ class TransactionsScreen extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        color: isDark ? const Color(0xFF121212) : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -124,8 +124,9 @@ class TransactionsScreen extends StatelessWidget {
         ],
         border: Border.all(
           color: isDark
-              ? Colors.white.withValues(alpha: 0.05)
+              ? const Color(0xFF333333)
               : Colors.black.withValues(alpha: 0.04),
+          width: 1,
         ),
       ),
       child: Row(

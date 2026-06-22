@@ -20,13 +20,13 @@ class AppTheme {
 
   // ── Surface / Background ───────────────────────────────────────────────
   static const Color _bgLight = Color(0xFFF8FAFC); // Slate 50
-  static const Color _bgDark = Color(0xFF0F172A); // Slate 900
+  static const Color _bgDark = Color(0xFF000000); // True Black
   static const Color _surfaceLight = Color(0xFFFFFFFF);
-  static const Color _surfaceDark = Color(0xFF1E293B); // Slate 800
+  static const Color _surfaceDark = Color(0xFF121212); // Dark Charcoal
 
   // ── Card surfaces ──────────────────────────────────────────────────────
-  static const Color cardDark1 = Color(0xFF1E293B);
-  static const Color cardDark2 = Color(0xFF334155); // Slate 700
+  static const Color cardDark1 = Color(0xFF121212);
+  static const Color cardDark2 = Color(0xFF1C1C1E); // Lighter charcoal for subtle dark gradients
   static const Color cardLight1 = Color(0xFFFFFFFF);
   static const Color cardLight2 = Color(0xFFF1F5F9); // Slate 100
 
@@ -40,7 +40,7 @@ class AppTheme {
   static const LinearGradient heroGradientDark = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFF0D9488), Color(0xFF0EA5E9)], // Teal → Sky
+    colors: [Color(0xFF434343), Color(0xFF000000)], // Premium metallic gradient
   );
 
   static const LinearGradient heroGradientLight = LinearGradient(
@@ -126,6 +126,18 @@ class AppTheme {
 
   static ThemeData get darkTheme {
     final base = ThemeData.dark(useMaterial3: true);
+    final darkTextTheme = _buildTextTheme(base.textTheme).copyWith(
+      bodyLarge: const TextStyle(color: Color(0xFFFFFFFF)),
+      bodyMedium: const TextStyle(color: Color(0xFFFFFFFF)),
+      bodySmall: const TextStyle(color: Color(0xFF8E8E93)),
+      titleLarge: const TextStyle(color: Color(0xFFFFFFFF)),
+      titleMedium: const TextStyle(color: Color(0xFFFFFFFF)),
+      titleSmall: const TextStyle(color: Color(0xFFFFFFFF)),
+      labelLarge: const TextStyle(color: Color(0xFFFFFFFF)),
+      labelMedium: const TextStyle(color: Color(0xFF8E8E93)),
+      labelSmall: const TextStyle(color: Color(0xFF8E8E93)),
+    );
+
     return base.copyWith(
       colorScheme: ColorScheme.fromSeed(
         seedColor: _primaryDark,
@@ -133,34 +145,38 @@ class AppTheme {
         surface: _surfaceDark,
       ),
       scaffoldBackgroundColor: _bgDark,
-      textTheme: _buildTextTheme(base.textTheme),
+      textTheme: darkTextTheme,
       appBarTheme: AppBarTheme(
         backgroundColor: _bgDark,
-        foregroundColor: const Color(0xFFF1F5F9),
+        foregroundColor: const Color(0xFFFFFFFF),
         elevation: 0,
         centerTitle: false,
         titleTextStyle: GoogleFonts.inter(
           fontSize: 20,
           fontWeight: FontWeight.w700,
-          color: const Color(0xFFF1F5F9),
+          color: const Color(0xFFFFFFFF),
         ),
       ),
       cardTheme: CardThemeData(
         color: _surfaceDark,
-        elevation: 4,
-        shadowColor: Colors.black.withValues(alpha: 0.3),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: Color(0xFF333333), width: 1),
+        ),
       ),
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: _surfaceDark,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          side: BorderSide(color: Color(0xFF333333), width: 1),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: _primaryDark,
-          foregroundColor: const Color(0xFF0F172A),
+          foregroundColor: const Color(0xFF000000),
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -172,7 +188,7 @@ class AppTheme {
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
         backgroundColor: _primaryDark,
-        foregroundColor: Color(0xFF0F172A),
+        foregroundColor: Color(0xFF000000),
       ),
     );
   }

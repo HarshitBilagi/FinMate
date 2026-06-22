@@ -35,13 +35,21 @@ class NetWorthCard extends StatelessWidget {
             ? AppTheme.heroGradientDark
             : AppTheme.heroGradientLight,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF0D9488).withValues(alpha: 0.3),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        boxShadow: isDark
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.4),
+                  blurRadius: 16,
+                  offset: const Offset(0, 8),
+                ),
+              ]
+            : [
+                BoxShadow(
+                  color: const Color(0xFF0D9488).withValues(alpha: 0.3),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -73,7 +81,7 @@ class NetWorthCard extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           Text(
-            '₹--,---.--',
+            currencyFormat.format(netWorth),
             style: GoogleFonts.inter(
               fontSize: 36,
               fontWeight: FontWeight.w800,
@@ -87,13 +95,13 @@ class NetWorthCard extends StatelessWidget {
               _BreakdownItem(
                 icon: Icons.savings_outlined,
                 label: 'Savings',
-                value: '₹--,---.--',
+                value: currencyFormat.format(savings),
               ),
               const SizedBox(width: 24),
               _BreakdownItem(
                 icon: Icons.credit_card_outlined,
                 label: 'Credit Available',
-                value: '₹--,---.--',
+                value: currencyFormat.format(availableCredit),
               ),
             ],
           ),
