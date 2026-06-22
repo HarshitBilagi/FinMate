@@ -81,7 +81,7 @@ class SmsReceiverService {
 
   /// Initialize local notifications and handle deep-linking taps
   static Future<void> initialize() async {
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings = AndroidInitializationSettings('@mipmap/launcher_icon');
     const initSettings = InitializationSettings(android: androidSettings);
 
     await _localNotifications.initialize(
