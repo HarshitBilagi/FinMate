@@ -26,6 +26,7 @@ class _CategorizeSheetState extends State<CategorizeSheet> {
   static const _categories = [
     _CategoryOption('rent', Icons.home_outlined, Color(0xFFEF4444)),
     _CategoryOption('whey protein', Icons.fitness_center_outlined, Color(0xFF6366F1)),
+    _CategoryOption('daily protein', Icons.restaurant_menu_outlined, Color(0xFFA855F7)),
     _CategoryOption('eggs', Icons.egg_outlined, Color(0xFFF59E0B)),
     _CategoryOption('sip', Icons.trending_up_outlined, Color(0xFF10B981)),
     _CategoryOption('stocks', Icons.show_chart_outlined, Color(0xFF22C55E)),

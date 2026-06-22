@@ -129,6 +129,7 @@ class TransactionTile extends StatelessWidget {
     return switch (category.toLowerCase().trim()) {
       'rent' => Icons.home_outlined,
       'whey protein' => Icons.fitness_center_outlined,
+      'daily protein' => Icons.restaurant_menu_outlined,
       'eggs' => Icons.egg_outlined,
       'sip' => Icons.trending_up_outlined,
       'stocks' => Icons.show_chart_outlined,
@@ -146,6 +147,7 @@ class TransactionTile extends StatelessWidget {
     return switch (category.toLowerCase().trim()) {
       'rent' => const Color(0xFFEF4444),
       'whey protein' => const Color(0xFF6366F1),
+      'daily protein' => const Color(0xFFA855F7),
       'eggs' => const Color(0xFFF59E0B),
       'sip' => const Color(0xFF10B981),
       'stocks' => const Color(0xFF22C55E),

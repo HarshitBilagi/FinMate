@@ -30,6 +30,7 @@ class ExpensesScreen extends StatelessWidget {
         return const Color(0xFF10B981); // Investments - Emerald
       case 'rent':
       case 'whey protein':
+      case 'daily protein':
       case 'eggs':
       case 'gym fees':
       case 'groceries':
@@ -67,6 +68,7 @@ class ExpensesScreen extends StatelessWidget {
           final categoryTotals = <String, double>{
             'rent': 0.0,
             'whey protein': 0.0,
+            'daily protein': 0.0,
             'eggs': 0.0,
             'sip': 0.0,
             'stocks': 0.0,
@@ -98,6 +100,7 @@ class ExpensesScreen extends StatelessWidget {
 
           final double fixedHealthTotal = categoryTotals['rent']! +
               categoryTotals['whey protein']! +
+              categoryTotals['daily protein']! +
               categoryTotals['eggs']! +
               categoryTotals['gym fees']! +
               categoryTotals['groceries']! +
