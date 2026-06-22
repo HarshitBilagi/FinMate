@@ -148,14 +148,26 @@ class NotificationsInboxScreen extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  'Uncategorized',
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: const Color(0xFFF59E0B),
-                  ),
-                ),
+                txn.isProcessing
+                    ? const Align(
+                        alignment: Alignment.centerLeft,
+                        child: SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 1.5,
+                            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFF59E0B)),
+                          ),
+                        ),
+                      )
+                    : Text(
+                        'Uncategorized',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: const Color(0xFFF59E0B),
+                        ),
+                      ),
               ],
             ),
           ),
@@ -173,6 +185,7 @@ class NotificationsInboxScreen extends StatelessWidget {
   }
 
   void _showCategorizeModal(BuildContext context, Transaction txn) {
+    final dashboard = context.read<DashboardProvider>();
     final notification = TransactionNotification(
       transactionId: txn.id,
       amount: txn.amount.toString(),
@@ -187,12 +200,13 @@ class NotificationsInboxScreen extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => TransactionCategorizeModal(
-        notification: notification,
-        onDismiss: () {
-          // Trigger a refresh/rebuild
-          context.read<DashboardProvider>().loadDashboard();
-        },
+      builder: (_) => ChangeNotifierProvider.value(
+        value: dashboard,
+        child: TransactionCategorizeModal(
+          notification: notification,
+          // No need for onDismiss → loadDashboard(); categorization already
+          // triggers _silentRefresh() via the provider.
+        ),
       ),
     );
   }

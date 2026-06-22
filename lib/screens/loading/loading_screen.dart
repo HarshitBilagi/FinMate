@@ -21,7 +21,6 @@ class _LoadingScreenState extends State<LoadingScreen>
 
   final List<String> _quotes = [
     "Budgeting isn't about restriction; it is about intentionality.",
-    "You do what is in your heart, son. You will be fine.",
     "Do not save what is left after spending, but spend what is left after saving.",
     "An investment in knowledge pays the best interest.",
     "Beware of little expenses; a small leak will sink a great ship.",
@@ -30,6 +29,7 @@ class _LoadingScreenState extends State<LoadingScreen>
   int _currentQuoteIndex = 0;
   Timer? _quoteTimer;
   bool _hasError = false;
+  bool _hasNavigated = false;
 
   @override
   void initState() {
@@ -57,9 +57,14 @@ class _LoadingScreenState extends State<LoadingScreen>
     _dashboardProvider = Provider.of<DashboardProvider>(context, listen: false);
     _dashboardProvider.addListener(_onDashboardStateChanged);
 
-    // Trigger dashboard data sync on mount
+    // Check if dashboard is already loaded (main.dart pre-hydrates it).
+    // If so, navigate immediately. Otherwise, the listener will handle it.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _dashboardProvider.loadDashboard();
+      if (!_dashboardProvider.isLoading && _dashboardProvider.errorMessage == null) {
+        _navigateToHome();
+      } else if (!_dashboardProvider.isLoading && _dashboardProvider.errorMessage != null) {
+        setState(() => _hasError = true);
+      }
     });
   }
 
@@ -72,15 +77,11 @@ class _LoadingScreenState extends State<LoadingScreen>
   }
 
   void _onDashboardStateChanged() {
-    if (!mounted) return;
+    if (!mounted || _hasNavigated) return;
     
     if (!_dashboardProvider.isLoading) {
       if (_dashboardProvider.errorMessage == null) {
-        setState(() {
-          _hasError = false;
-        });
-        // Transition to HomeScreen with a smooth custom fade transition or default router push
-        Navigator.of(context).pushReplacementNamed('/home');
+        _navigateToHome();
       } else {
         setState(() {
           _hasError = true;
@@ -92,6 +93,13 @@ class _LoadingScreenState extends State<LoadingScreen>
         _hasError = false;
       });
     }
+  }
+
+  void _navigateToHome() {
+    if (_hasNavigated || !mounted) return;
+    _hasNavigated = true;
+    setState(() => _hasError = false);
+    Navigator.of(context).pushReplacementNamed('/home');
   }
 
   void _retryConnection() {

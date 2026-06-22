@@ -108,209 +108,159 @@ class ExpensesScreen extends StatelessWidget {
               categoryTotals['subscriptions']! +
               categoryTotals['uncategorized']!;
 
-          return ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            physics: const BouncingScrollPhysics(),
+          return Stack(
             children: [
-              // Macro Donut Chart Card
-              Card(
-                margin: const EdgeInsets.only(bottom: 24),
-                child: Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Macro Breakdown',
-                        style: GoogleFonts.inter(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: isDark ? Colors.white : const Color(0xFF1E293B),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          // Donut Chart representation
-                          Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              SizedBox(
-                                width: 140,
-                                height: 140,
-                                child: CustomPaint(
-                                  painter: DonutChartPainter(
-                                    values: [
-                                      investmentsTotal,
-                                      fixedHealthTotal,
-                                      variablesTotal
-                                    ],
-                                    colors: const [
-                                      Color(0xFF10B981), // Investments - Emerald
-                                      Color(0xFF6366F1), // Fixed/Health - Indigo
-                                      Color(0xFFF59E0B), // Variables - Amber
-                                    ],
-                                    strokeWidth: 16,
-                                  ),
-                                ),
-                              ),
-                              Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    'TOTAL',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w500,
-                                      color: isDark
-                                          ? Colors.white.withValues(alpha: 0.5)
-                                          : Colors.black.withValues(alpha: 0.5),
-                                      letterSpacing: 1.0,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    currencyFormat.format(totalOutflow),
-                                    style: GoogleFonts.inter(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w800,
-                                      color: isDark
-                                          ? Colors.white
-                                          : const Color(0xFF1E293B),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                          const SizedBox(width: 16),
-                          // Legend
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _LegendItem(
-                                  label: 'Investments',
-                                  amount: investmentsTotal,
-                                  total: totalOutflow,
-                                  color: const Color(0xFF10B981),
-                                  currencyFormat: currencyFormat,
-                                ),
-                                const SizedBox(height: 12),
-                                _LegendItem(
-                                  label: 'Fixed / Health',
-                                  amount: fixedHealthTotal,
-                                  total: totalOutflow,
-                                  color: const Color(0xFF6366F1),
-                                  currencyFormat: currencyFormat,
-                                ),
-                                const SizedBox(height: 12),
-                                _LegendItem(
-                                  label: 'Variables',
-                                  amount: variablesTotal,
-                                  total: totalOutflow,
-                                  color: const Color(0xFFF59E0B),
-                                  currencyFormat: currencyFormat,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+              RefreshIndicator(
+                onRefresh: () => dashboard.loadDashboard(),
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics(),
                   ),
-                ),
-              ),
-
-              // Granular Category Table
-              Card(
-                margin: const EdgeInsets.only(bottom: 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Table Header
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Category',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: isDark
-                                  ? Colors.white.withValues(alpha: 0.4)
-                                  : Colors.black.withValues(alpha: 0.4),
-                              letterSpacing: 1.0,
+                    // Macro Donut Chart Card
+                    Card(
+                      margin: const EdgeInsets.only(bottom: 24),
+                      child: Padding(
+                        padding: const EdgeInsets.all(20.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Macro Breakdown',
+                              style: GoogleFonts.inter(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: isDark ? Colors.white : const Color(0xFF1E293B),
+                              ),
                             ),
-                          ),
-                          Text(
-                            'Total Outflow',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: isDark
-                                  ? Colors.white.withValues(alpha: 0.4)
-                                  : Colors.black.withValues(alpha: 0.4),
-                              letterSpacing: 1.0,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Divider(
-                      height: 1,
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.08)
-                          : Colors.black.withValues(alpha: 0.08),
-                    ),
-                    // Table Body Rows
-                    ...categoryTotals.entries.map((entry) {
-                      final catName = entry.key;
-                      final catAmount = entry.value;
-                      final macroColor = _getMacroColorForCategory(catName);
-
-                      return Column(
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 12),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            const SizedBox(height: 20),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                               children: [
-                                Row(
+                                // Donut Chart representation
+                                Stack(
+                                  alignment: Alignment.center,
                                   children: [
-                                    Container(
-                                      width: 8,
-                                      height: 8,
-                                      decoration: BoxDecoration(
-                                        color: macroColor,
-                                        shape: BoxShape.circle,
+                                    SizedBox(
+                                      width: 140,
+                                      height: 140,
+                                      child: CustomPaint(
+                                        painter: DonutChartPainter(
+                                          values: [
+                                            investmentsTotal,
+                                            fixedHealthTotal,
+                                            variablesTotal
+                                          ],
+                                          colors: const [
+                                            Color(0xFF10B981), // Investments - Emerald
+                                            Color(0xFF6366F1), // Fixed/Health - Indigo
+                                            Color(0xFFF59E0B), // Variables - Amber
+                                          ],
+                                          strokeWidth: 16,
+                                        ),
                                       ),
                                     ),
-                                    const SizedBox(width: 10),
-                                    Text(
-                                      _capitalize(catName),
-                                      style: GoogleFonts.inter(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                        color: isDark
-                                            ? Colors.white.withValues(alpha: 0.9)
-                                            : const Color(0xFF1E293B),
-                                      ),
+                                    Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          'TOTAL',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w500,
+                                            color: isDark
+                                                ? Colors.white.withValues(alpha: 0.5)
+                                                : Colors.black.withValues(alpha: 0.5),
+                                            letterSpacing: 1.0,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          currencyFormat.format(totalOutflow),
+                                          style: GoogleFonts.inter(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w800,
+                                            color: isDark
+                                                ? Colors.white
+                                                : const Color(0xFF1E293B),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
+                                const SizedBox(width: 16),
+                                // Legend
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      _LegendItem(
+                                        label: 'Investments',
+                                        amount: investmentsTotal,
+                                        total: totalOutflow,
+                                        color: const Color(0xFF10B981),
+                                        currencyFormat: currencyFormat,
+                                      ),
+                                      const SizedBox(height: 12),
+                                      _LegendItem(
+                                        label: 'Fixed / Health',
+                                        amount: fixedHealthTotal,
+                                        total: totalOutflow,
+                                        color: const Color(0xFF6366F1),
+                                        currencyFormat: currencyFormat,
+                                      ),
+                                      const SizedBox(height: 12),
+                                      _LegendItem(
+                                        label: 'Variables',
+                                        amount: variablesTotal,
+                                        total: totalOutflow,
+                                        color: const Color(0xFFF59E0B),
+                                        currencyFormat: currencyFormat,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // Granular Category Table
+                    Card(
+                      margin: const EdgeInsets.only(bottom: 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Table Header
+                          Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
                                 Text(
-                                  currencyFormat.format(catAmount),
+                                  'Category',
                                   style: GoogleFonts.inter(
-                                    fontSize: 14,
+                                    fontSize: 12,
                                     fontWeight: FontWeight.w700,
                                     color: isDark
-                                        ? Colors.white
-                                        : const Color(0xFF1E293B),
+                                        ? Colors.white.withValues(alpha: 0.4)
+                                        : Colors.black.withValues(alpha: 0.4),
+                                    letterSpacing: 1.0,
+                                  ),
+                                ),
+                                Text(
+                                  'Total Outflow',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: isDark
+                                        ? Colors.white.withValues(alpha: 0.4)
+                                        : Colors.black.withValues(alpha: 0.4),
+                                    letterSpacing: 1.0,
                                   ),
                                 ),
                               ],
@@ -319,43 +269,102 @@ class ExpensesScreen extends StatelessWidget {
                           Divider(
                             height: 1,
                             color: isDark
-                                ? Colors.white.withValues(alpha: 0.05)
-                                : Colors.black.withValues(alpha: 0.05),
+                                ? Colors.white.withValues(alpha: 0.08)
+                                : Colors.black.withValues(alpha: 0.08),
                           ),
-                        ],
-                      );
-                    }),
-                    // Mathematical Total Row
-                    Container(
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? Colors.white.withValues(alpha: 0.03)
-                            : Colors.black.withValues(alpha: 0.02),
-                        borderRadius: const BorderRadius.vertical(
-                            bottom: Radius.circular(20)),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 16),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'TOTAL OUTFLOW',
-                            style: GoogleFonts.inter(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w800,
-                              color: isDark ? Colors.white : const Color(0xFF1E293B),
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                          Text(
-                            currencyFormat.format(totalOutflow),
-                            style: GoogleFonts.inter(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w900,
+                          // Table Body Rows
+                          ...categoryTotals.entries.map((entry) {
+                            final catName = entry.key;
+                            final catAmount = entry.value;
+                            final macroColor = _getMacroColorForCategory(catName);
+
+                            return Column(
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 12),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Container(
+                                            width: 8,
+                                            height: 8,
+                                            decoration: BoxDecoration(
+                                              color: macroColor,
+                                              shape: BoxShape.circle,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Text(
+                                            _capitalize(catName),
+                                            style: GoogleFonts.inter(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                              color: isDark
+                                                  ? Colors.white.withValues(alpha: 0.9)
+                                                  : const Color(0xFF1E293B),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      Text(
+                                        currencyFormat.format(catAmount),
+                                        style: GoogleFonts.inter(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w700,
+                                          color: isDark
+                                              ? Colors.white
+                                              : const Color(0xFF1E293B),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Divider(
+                                  height: 1,
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.05)
+                                      : Colors.black.withValues(alpha: 0.05),
+                                ),
+                              ],
+                            );
+                          }),
+                          // Mathematical Total Row
+                          Container(
+                            decoration: BoxDecoration(
                               color: isDark
-                                  ? const Color(0xFF2DD4BF)
-                                  : const Color(0xFF0D9488),
+                                  ? Colors.white.withValues(alpha: 0.03)
+                                  : Colors.black.withValues(alpha: 0.02),
+                              borderRadius: const BorderRadius.vertical(
+                                  bottom: Radius.circular(20)),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 16),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'TOTAL OUTFLOW',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w800,
+                                    color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                Text(
+                                  currencyFormat.format(totalOutflow),
+                                  style: GoogleFonts.inter(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w900,
+                                    color: isDark
+                                        ? const Color(0xFF2DD4BF)
+                                        : const Color(0xFF0D9488),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -364,6 +373,13 @@ class ExpensesScreen extends StatelessWidget {
                   ],
                 ),
               ),
+              if (dashboard.isLoading)
+                Container(
+                  color: Colors.black.withValues(alpha: 0.15),
+                  child: const Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                ),
             ],
           );
         },

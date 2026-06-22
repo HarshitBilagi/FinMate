@@ -129,8 +129,7 @@ def categorize_transaction(
             
         # Update the category
         update_res = supabase.table("transactions").update({
-            "category": request.category,
-            "updated_at": datetime.now().isoformat()
+            "category": request.category
         }).eq("id", transaction_id).execute()
         
         if not update_res.data:
@@ -154,6 +153,17 @@ def categorize_transaction(
         logger.error(f"Error categorizing transaction: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
+@router.patch("/transactions/{transaction_id}/category", response_model=CategorizeTransactionResponse)
+def categorize_transaction_patch(
+    transaction_id: str, 
+    request: CategorizeTransactionRequest,
+    device_id: str = Depends(get_device_id)
+):
+    """
+    Updates a transaction's category via PATCH.
+    """
+    return categorize_transaction(transaction_id, request, device_id)
+
 @router.post("/transactions/ignore/{upi_ref_id}", response_model=IgnoreTransactionResponse)
 def ignore_transaction(upi_ref_id: str, device_id: str = Depends(get_device_id)):
     """
@@ -166,8 +176,7 @@ def ignore_transaction(upi_ref_id: str, device_id: str = Depends(get_device_id))
         # Try updating Supabase (setting category to 'ignored' or updating an is_ignored boolean if exists)
         try:
             supabase.table("transactions").update({
-                "category": "ignored",
-                "updated_at": datetime.now().isoformat()
+                "category": "ignored"
             }).eq("upi_ref_id", upi_ref_id).execute()
         except Exception as e:
             logger.warning(f"Could not update Supabase for ignore: {e}")

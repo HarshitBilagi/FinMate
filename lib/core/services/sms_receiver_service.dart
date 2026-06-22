@@ -189,6 +189,19 @@ class SmsReceiverService {
     }
   }
 
+  /// Request exemption from Android Doze mode battery optimizations.
+  /// This is critical for Android 14+ (API 34+) where background isolates
+  /// are aggressively killed. Should be called during app initialization.
+  static Future<void> requestBatteryOptimizationExemption() async {
+    final status = await Permission.ignoreBatteryOptimizations.status;
+    if (!status.isGranted) {
+      final result = await Permission.ignoreBatteryOptimizations.request();
+      debugPrint('[SMS Receiver] Battery optimization exemption: ${result.isGranted ? "GRANTED" : "DENIED"}');
+    } else {
+      debugPrint('[SMS Receiver] Battery optimization exemption already granted.');
+    }
+  }
+
   /// Parse the ICICI SMS text structure.
   /// Handles both Credit Card and Debit Account message patterns.
   ///

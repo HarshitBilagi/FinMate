@@ -26,6 +26,7 @@ class TransactionCategorizeModal extends StatefulWidget {
 class _TransactionCategorizeModalState
     extends State<TransactionCategorizeModal> {
   String? _selectedCategory;
+  bool _isSaving = false;
 
   static const _categories = [
     _CategoryOption('rent', Icons.home_outlined, Color(0xFFEF4444)),
@@ -46,6 +47,47 @@ class _TransactionCategorizeModalState
   void initState() {
     super.initState();
     _selectedCategory = 'uncategorized';
+  }
+
+  Future<void> _onAdd() async {
+    if (_isSaving) return;
+    setState(() => _isSaving = true);
+
+    final categoryToUse = _selectedCategory ?? 'uncategorized';
+    // Capture provider BEFORE async gap
+    final dashboard = context.read<DashboardProvider>();
+    final success = await dashboard.addAndCategorizeTransaction(
+      upiRefId: widget.notification.upiRefId,
+      amount: double.tryParse(widget.notification.amount) ?? 0.0,
+      merchant: widget.notification.merchant,
+      category: categoryToUse,
+      cardMasked: widget.notification.cardMasked,
+      transactionDate: widget.notification.transactionDate,
+    );
+
+    if (!mounted) return;
+
+    if (success) {
+      widget.onDismiss?.call();
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'Transaction added to ${categoryToUse.split(' ').map((word) => word.toLowerCase() == 'sip' ? 'SIP' : (word[0].toUpperCase() + word.substring(1).toLowerCase())).join(' ')}.'),
+          backgroundColor: const Color(0xFF10B981),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } else {
+      setState(() => _isSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to save. Please try again.'),
+          backgroundColor: Colors.redAccent,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   @override
@@ -161,6 +203,12 @@ class _TransactionCategorizeModalState
             ),
           ),
           const SizedBox(height: 12),
+          if (_isSaving)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else
           Flexible(
             child: GridView.builder(
               shrinkWrap: true,
@@ -222,7 +270,7 @@ class _TransactionCategorizeModalState
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () {
+                  onPressed: _isSaving ? null : () {
                     context
                         .read<DashboardProvider>()
                         .ignoreTransaction(widget.notification.upiRefId);
@@ -260,27 +308,7 @@ class _TransactionCategorizeModalState
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: () {
-                    final categoryToUse = _selectedCategory ?? 'uncategorized';
-                    context
-                        .read<DashboardProvider>()
-                        .addAndCategorizeTransaction(
-                          upiRefId: widget.notification.upiRefId,
-                          amount: amountDouble,
-                          merchant: widget.notification.merchant,
-                          category: categoryToUse,
-                        );
-                    widget.onDismiss?.call();
-                    Navigator.of(context).pop();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                            'Transaction added to ${categoryToUse.split(' ').map((word) => word.toLowerCase() == 'sip' ? 'SIP' : (word[0].toUpperCase() + word.substring(1).toLowerCase())).join(' ')}.'),
-                        backgroundColor: const Color(0xFF10B981),
-                        duration: const Duration(seconds: 2),
-                      ),
-                    );
-                  },
+                  onPressed: _isSaving ? null : _onAdd,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: isDark
                         ? const Color(0xFF2DD4BF)
@@ -291,13 +319,19 @@ class _TransactionCategorizeModalState
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14)),
                   ),
-                  child: Text(
-                    'Add',
-                    style: GoogleFonts.inter(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+                  child: _isSaving
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text(
+                          'Add',
+                          style: GoogleFonts.inter(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                 ),
               ),
             ],

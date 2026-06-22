@@ -15,6 +15,8 @@ class Transaction {
   final String source; // 'email' | 'sms' | 'manual'
   final DateTime transactedAt;
 
+  final bool isProcessing;
+
   const Transaction({
     required this.id,
     required this.cardId,
@@ -26,6 +28,7 @@ class Transaction {
     this.isRefund = false,
     this.source = 'email',
     required this.transactedAt,
+    this.isProcessing = false,
   });
 
   factory Transaction.fromJson(Map<String, dynamic> json) {
@@ -40,21 +43,35 @@ class Transaction {
       isRefund: json['is_refund'] as bool? ?? false,
       source: json['source'] as String? ?? 'email',
       transactedAt: DateTime.parse(json['transacted_at'] as String),
+      isProcessing: false,
     );
   }
 
-  Transaction copyWith({String? category}) {
+  Transaction copyWith({
+    String? id,
+    String? cardId,
+    String? upiRefId,
+    double? amount,
+    String? merchant,
+    String? category,
+    String? transactionType,
+    bool? isRefund,
+    String? source,
+    DateTime? transactedAt,
+    bool? isProcessing,
+  }) {
     return Transaction(
-      id: id,
-      cardId: cardId,
-      upiRefId: upiRefId,
-      amount: amount,
-      merchant: merchant,
+      id: id ?? this.id,
+      cardId: cardId ?? this.cardId,
+      upiRefId: upiRefId ?? this.upiRefId,
+      amount: amount ?? this.amount,
+      merchant: merchant ?? this.merchant,
       category: category ?? this.category,
-      transactionType: transactionType,
-      isRefund: isRefund,
-      source: source,
-      transactedAt: transactedAt,
+      transactionType: transactionType ?? this.transactionType,
+      isRefund: isRefund ?? this.isRefund,
+      source: source ?? this.source,
+      transactedAt: transactedAt ?? this.transactedAt,
+      isProcessing: isProcessing ?? this.isProcessing,
     );
   }
 }

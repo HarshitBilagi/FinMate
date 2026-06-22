@@ -52,16 +52,29 @@ void main() async {
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   await NotificationService().initialize();
 
-  // Initialize native SMS listener services
+  // ── Boot Phase 1: Wake the backend container ─────────────────────────
+  // Initiate a lightweight health check to wake up the Render container
+  // with minimal payload weight while the user is on the auth/biometric screen.
+  debugPrint('[Cold Boot] Phase 1 — Initiating container wake-up via checkBackendHealth().');
+  final apiClient = FinanceApiClient();
+  await apiClient.checkBackendHealth();
+
+  // ── Boot Phase 2: Hydrate dashboard state ────────────────────────────
+  // Load dashboard data from the backend BEFORE rendering the app.
+  // This ensures the state is fully populated when HomeScreen mounts.
+  debugPrint('[Cold Boot] Phase 2 — Hydrating dashboard state via loadDashboard().');
+  final dashboardProvider = DashboardProvider();
+  await dashboardProvider.loadDashboard();
+
+  // ── Boot Phase 3: SMS listener registration (LAST) ───────────────────
+  // Register the SMS interceptor AFTER network-heavy operations complete
+  // to avoid resource contention that can cause Android to kill the isolate.
+  debugPrint('[Cold Boot] Phase 3 — Initializing SMS receiver services.');
   await SmsReceiverService.initialize();
   await SmsReceiverService.startListening();
 
-  // [Cold Boot] Initiate a lightweight health check to wake up the Render container
-  // with minimal payload weight during biometrics.
-  debugPrint('[Cold Boot] Initiating container wake-up via checkBackendHealth() — Render container wake-up initiated.');
-  FinanceApiClient().checkBackendHealth();
-
-  final dashboardProvider = DashboardProvider();
+  // Request battery optimization exemption for Android 14+ Doze mode
+  await SmsReceiverService.requestBatteryOptimizationExemption();
 
   runApp(FinanceFriendApp(dashboardProvider: dashboardProvider));
 }

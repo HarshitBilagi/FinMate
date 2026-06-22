@@ -52,8 +52,8 @@ class FinanceApiClient {
   /// Returns the updated Remaining Limit.
   Future<Map<String, dynamic>> categorizeTransaction(String transactionId, String category) async {
     return _request(
-      'POST',
-      '/transactions/categorize/$transactionId',
+      'PATCH',
+      '/transactions/$transactionId/category',
       body: {'category': category},
     );
   }
@@ -148,6 +148,10 @@ class FinanceApiClient {
       } else if (method == 'POST') {
         response = await _client
             .post(uri, headers: headers, body: jsonEncode(body))
+            .timeout(_timeout);
+      } else if (method == 'PATCH') {
+        response = await _client
+            .patch(uri, headers: headers, body: jsonEncode(body))
             .timeout(_timeout);
       } else {
         throw UnsupportedError('HTTP method $method not supported');

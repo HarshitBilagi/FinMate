@@ -52,11 +52,22 @@ class TransactionTile extends StatelessWidget {
                 .withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Icon(
-            _categoryIcon(transaction.category),
-            color: _categoryColor(transaction.category),
-            size: 22,
-          ),
+          child: transaction.isProcessing
+              ? Center(
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.0,
+                      color: _categoryColor(transaction.category),
+                    ),
+                  ),
+                )
+              : Icon(
+                  _categoryIcon(transaction.category),
+                  color: _categoryColor(transaction.category),
+                  size: 22,
+                ),
         ),
         title: Text(
           transaction.merchant ?? 'Unknown',

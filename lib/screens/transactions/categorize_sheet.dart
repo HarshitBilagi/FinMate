@@ -11,10 +11,17 @@ import 'package:intl/intl.dart';
 import 'package:personal_finance_assistant/providers/dashboard_provider.dart';
 import 'package:personal_finance_assistant/models/transaction.dart';
 
-class CategorizeSheet extends StatelessWidget {
+class CategorizeSheet extends StatefulWidget {
   final Transaction transaction;
 
   const CategorizeSheet({super.key, required this.transaction});
+
+  @override
+  State<CategorizeSheet> createState() => _CategorizeSheetState();
+}
+
+class _CategorizeSheetState extends State<CategorizeSheet> {
+  bool _isSaving = false;
 
   static const _categories = [
     _CategoryOption('rent', Icons.home_outlined, Color(0xFFEF4444)),
@@ -29,6 +36,32 @@ class CategorizeSheet extends StatelessWidget {
     _CategoryOption('groceries', Icons.local_grocery_store_outlined, Color(0xFF84CC16)),
     _CategoryOption('transportion', Icons.directions_car_outlined, Color(0xFF3B82F6)),
   ];
+
+  Future<void> _onCategoryTap(String categoryName) async {
+    if (_isSaving) return;
+    setState(() => _isSaving = true);
+
+    // Capture provider BEFORE async gap
+    final provider = context.read<DashboardProvider>();
+    final success = await provider.categorizeTransaction(widget.transaction.id, categoryName);
+
+    if (!mounted) return;
+    setState(() => _isSaving = false);
+
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Added to ${categoryName.split(' ').map((word) => word.toLowerCase() == 'sip' ? 'SIP' : (word[0].toUpperCase() + word.substring(1).toLowerCase())).join(' ')}')),
+      );
+      Navigator.of(context).pop();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to save. Please try again.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -91,11 +124,11 @@ class CategorizeSheet extends StatelessWidget {
               ),
               child: Column(
                 children: [
-                  _DetailRow('Amount', currencyFormat.format(transaction.amount)),
+                  _DetailRow('Amount', currencyFormat.format(widget.transaction.amount)),
                   const SizedBox(height: 8),
-                  _DetailRow('Merchant', transaction.merchant ?? 'Unknown'),
+                  _DetailRow('Merchant', widget.transaction.merchant ?? 'Unknown'),
                   const SizedBox(height: 8),
-                  _DetailRow('UPI Ref', transaction.upiRefId),
+                  _DetailRow('UPI Ref', widget.transaction.upiRefId),
                 ],
               ),
             ),
@@ -114,6 +147,13 @@ class CategorizeSheet extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
+            // Loading indicator while saving
+            if (_isSaving)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else
             // Category grid
             GridView.builder(
               shrinkWrap: true,
@@ -127,15 +167,10 @@ class CategorizeSheet extends StatelessWidget {
               itemCount: _categories.length,
               itemBuilder: (context, index) {
                 final cat = _categories[index];
-                final isSelected = transaction.category == cat.name;
+                final isSelected = widget.transaction.category == cat.name;
 
                 return GestureDetector(
-                  onTap: () {
-                    context
-                        .read<DashboardProvider>()
-                        .categorizeTransaction(transaction.id, cat.name);
-                    Navigator.of(context).pop();
-                  },
+                  onTap: () => _onCategoryTap(cat.name),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     decoration: BoxDecoration(

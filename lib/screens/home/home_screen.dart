@@ -18,7 +18,7 @@ import 'package:personal_finance_assistant/models/transaction.dart';
 import 'package:personal_finance_assistant/models/card_model.dart';
 import 'package:personal_finance_assistant/services/notification_service.dart';
 import 'package:personal_finance_assistant/screens/transactions/transaction_categorize_modal.dart';
-import 'package:permission_handler/permission_handler.dart';
+
 import 'package:personal_finance_assistant/core/services/sms_receiver_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -38,24 +38,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   StreamSubscription<TransactionNotification>? _notificationSubscription;
 
-  Future<void> _requestPermissions() async {
-    final statuses = await [
-      Permission.sms,
-      Permission.notification,
-    ].request();
 
-    if (statuses[Permission.sms]?.isGranted ?? false) {
-      // Start listening to SMS if permissions were granted
-      SmsReceiverService.startListening();
-    }
-  }
 
   @override
   void initState() {
     super.initState();
+    // Dashboard is pre-hydrated in main.dart — no need to call loadDashboard() again.
+    // SMS listener is registered in main.dart — no need to call startListening() again.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<DashboardProvider>().loadDashboard();
-      _requestPermissions();
       _drainPendingTransaction();
     });
 
@@ -63,8 +53,22 @@ class _HomeScreenState extends State<HomeScreen> {
     _notificationSubscription =
         NotificationService().onTransactionReceived.listen((notification) {
       if (mounted) {
-        context.read<DashboardProvider>().loadDashboard();
-        _showTransactionCategorizeModal(context, notification);
+        final dashboard = context.read<DashboardProvider>();
+        final matchingTxns = dashboard.recentTransactions.where((t) => t.upiRefId == notification.upiRefId);
+        TransactionNotification latestNotification = notification;
+        if (matchingTxns.isNotEmpty) {
+          final latestTxn = matchingTxns.first;
+          latestNotification = TransactionNotification(
+            transactionId: latestTxn.id,
+            amount: latestTxn.amount.toString(),
+            merchant: latestTxn.merchant ?? notification.merchant,
+            upiRefId: latestTxn.upiRefId,
+            cardMasked: latestTxn.cardId,
+            action: latestTxn.category,
+            transactionDate: latestTxn.transactedAt,
+          );
+        }
+        _showTransactionCategorizeModal(context, latestNotification);
       }
     });
   }
@@ -74,8 +78,22 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _drainPendingTransaction() async {
     final pending = await SmsReceiverService.drainPendingNotification();
     if (pending != null && mounted) {
-      context.read<DashboardProvider>().loadDashboard();
-      _showTransactionCategorizeModal(context, pending);
+      final dashboard = context.read<DashboardProvider>();
+      final matchingTxns = dashboard.recentTransactions.where((t) => t.upiRefId == pending.upiRefId);
+      TransactionNotification latestNotification = pending;
+      if (matchingTxns.isNotEmpty) {
+        final latestTxn = matchingTxns.first;
+        latestNotification = TransactionNotification(
+          transactionId: latestTxn.id,
+          amount: latestTxn.amount.toString(),
+          merchant: latestTxn.merchant ?? pending.merchant,
+          upiRefId: latestTxn.upiRefId,
+          cardMasked: latestTxn.cardId,
+          action: latestTxn.category,
+          transactionDate: latestTxn.transactedAt,
+        );
+      }
+      _showTransactionCategorizeModal(context, latestNotification);
     }
   }
 
@@ -85,20 +103,19 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  void _clearNotification(TransactionNotification notification) {
-    if (!mounted) return;
-    context.read<DashboardProvider>().loadDashboard();
-  }
-
   void _showTransactionCategorizeModal(
       BuildContext context, TransactionNotification notification) {
+    final dashboard = context.read<DashboardProvider>();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => TransactionCategorizeModal(
-        notification: notification,
-        onDismiss: () => _clearNotification(notification),
+      builder: (_) => ChangeNotifierProvider.value(
+        value: dashboard,
+        child: TransactionCategorizeModal(
+          notification: notification,
+          // No onDismiss needed — categorization already triggers _silentRefresh()
+        ),
       ),
     );
   }
@@ -161,89 +178,100 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: Consumer<DashboardProvider>(
         builder: (context, dashboard, _) {
-          return RefreshIndicator(
-            onRefresh: () => dashboard.loadDashboard(),
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              physics: const AlwaysScrollableScrollPhysics(
-                parent: BouncingScrollPhysics(),
-              ),
-              children: [
-                const SizedBox(height: 8),
-                // Greeting
-                Text(
-                  _greeting(),
-                  style: GoogleFonts.inter(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w400,
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.6)
-                        : Colors.black.withValues(alpha: 0.5),
+          return Stack(
+            children: [
+              RefreshIndicator(
+                onRefresh: () => dashboard.loadDashboard(),
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics(),
                   ),
-                ),
-                const SizedBox(height: 20),
-
-                // Card 1: Net Worth
-                NetWorthCard(
-                  netWorth: dashboard.isLoading ? 0.0 : dashboard.totalNetWorth,
-                  savings: dashboard.isLoading ? 0.0 : dashboard.savingsBalance,
-                  availableCredit: dashboard.isLoading
-                      ? 0.0
-                      : (dashboard.primaryCard?.availableLimit ?? 0.0),
-                  currencyFormat: _currencyFormat,
-                  isDark: isDark,
-                ),
-                const SizedBox(height: 16),
-
-                // Card 2: ICICI Card Status
-                _ICICICardStatusCard(
-                  isLoading: dashboard.isLoading,
-                  card: dashboard.primaryCard,
-                  currencyFormat: _currencyFormat,
-                  isDark: isDark,
-                ),
-                const SizedBox(height: 28),
-
-                // Recent Transactions Header
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
+                    const SizedBox(height: 8),
+                    // Greeting
                     Text(
-                      'Recent Transactions',
+                      _greeting(),
                       style: GoogleFonts.inter(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w400,
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.6)
+                            : Colors.black.withValues(alpha: 0.5),
                       ),
                     ),
-                    TextButton(
-                      onPressed: () =>
-                          Navigator.of(context).pushNamed('/transactions'),
-                      child: Text(
-                        'See All',
-                        style: GoogleFonts.inter(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: isDark
-                              ? const Color(0xFF2DD4BF)
-                              : const Color(0xFF0D9488),
+                    const SizedBox(height: 20),
+
+                    // Card 1: Net Worth
+                    NetWorthCard(
+                      netWorth: dashboard.isLoading ? 0.0 : dashboard.totalNetWorth,
+                      savings: dashboard.isLoading ? 0.0 : dashboard.savingsBalance,
+                      availableCredit: dashboard.isLoading
+                          ? 0.0
+                          : (dashboard.primaryCard?.availableLimit ?? 0.0),
+                      currencyFormat: _currencyFormat,
+                      isDark: isDark,
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Card 2: ICICI Card Status
+                    _ICICICardStatusCard(
+                      isLoading: dashboard.isLoading,
+                      card: dashboard.primaryCard,
+                      currencyFormat: _currencyFormat,
+                      isDark: isDark,
+                    ),
+                    const SizedBox(height: 28),
+
+                    // Recent Transactions Header
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Recent Transactions',
+                          style: GoogleFonts.inter(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
+                        TextButton(
+                          onPressed: () =>
+                              Navigator.of(context).pushNamed('/transactions'),
+                          child: Text(
+                            'See All',
+                            style: GoogleFonts.inter(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: isDark
+                                  ? const Color(0xFF2DD4BF)
+                                  : const Color(0xFF0D9488),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Transaction List
+                    ...dashboard.recentTransactions.map(
+                      (txn) => TransactionTile(
+                        transaction: txn,
+                        currencyFormat: _currencyFormat,
+                        onCategorize: () => _showCategorizeSheet(context, txn),
                       ),
                     ),
+                    const SizedBox(height: 32),
                   ],
                 ),
-                const SizedBox(height: 8),
-
-                // Transaction List
-                ...dashboard.recentTransactions.map(
-                  (txn) => TransactionTile(
-                    transaction: txn,
-                    currencyFormat: _currencyFormat,
-                    onCategorize: () => _showCategorizeSheet(context, txn),
+              ),
+              if (dashboard.isLoading)
+                Container(
+                  color: Colors.black.withValues(alpha: 0.15),
+                  child: const Center(
+                    child: CircularProgressIndicator(),
                   ),
                 ),
-                const SizedBox(height: 32),
-              ],
-            ),
+            ],
           );
         },
       ),
@@ -258,10 +286,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showCategorizeSheet(BuildContext context, Transaction txn) {
+    final dashboard = context.read<DashboardProvider>();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (_) => CategorizeSheet(transaction: txn),
+      builder: (_) => ChangeNotifierProvider.value(
+        value: dashboard,
+        child: CategorizeSheet(transaction: txn),
+      ),
     );
   }
 }
