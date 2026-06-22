@@ -162,6 +162,25 @@ class SmsReceiverService {
 
   /// Start foreground & background SMS listeners if permissions are granted
   static Future<void> startListening() async {
+    // Request SMS and Notification permissions on initialization if not yet granted
+    final smsStatus = await Permission.sms.status;
+    final notificationStatus = await Permission.notification.status;
+
+    if (!smsStatus.isGranted || !notificationStatus.isGranted) {
+      debugPrint('[SMS Receiver] Requesting SMS and Notification permissions...');
+      final statuses = await [
+        Permission.sms,
+        Permission.notification,
+      ].request();
+
+      if (statuses[Permission.sms]?.isGranted != true) {
+        debugPrint('[SMS Receiver] SMS permission denied by user.');
+      }
+      if (statuses[Permission.notification]?.isGranted != true) {
+        debugPrint('[SMS Receiver] Notification permission denied by user.');
+      }
+    }
+
     final permissionsGranted = await Permission.sms.isGranted;
     if (permissionsGranted == true) {
       _telephony.listenIncomingSms(
