@@ -59,6 +59,7 @@ backend/.env
 *.jks
 android/key.properties
 android/local.properties
+env
 .env
 google-services.json
 backend/firebase_service_account.json
