@@ -26,7 +26,7 @@ void nativeSmsBackgroundHandler(SmsMessage message) async {
 
   // 2. Initialize a LOCAL FlutterLocalNotificationsPlugin for this isolate
   final bgNotificationsPlugin = FlutterLocalNotificationsPlugin();
-  const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+  const androidSettings = AndroidInitializationSettings('@mipmap/launcher_icon');
   const initSettings = InitializationSettings(android: androidSettings);
   await bgNotificationsPlugin.initialize(initSettings);
 
