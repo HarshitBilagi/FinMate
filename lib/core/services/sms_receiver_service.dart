@@ -37,10 +37,7 @@ void nativeSmsBackgroundHandler(SmsMessage message) async {
   if (parsed != null) {
     debugPrint('[SMS Background] Transaction parsed: ₹${parsed.amount} at ${parsed.merchant}');
 
-    // 4. Attempt database write (via FastAPI backend), cache on failure
-    await SmsReceiverService.saveTransactionToBackendOrCache(parsed, body);
-
-    // 5. Fire notification directly from this isolate's own plugin instance
+    // 4. Fire notification directly from this isolate's own plugin instance
     final payload = jsonEncode({
       'transaction_id': parsed.transactionId,
       'amount': parsed.amount,
@@ -71,6 +68,9 @@ void nativeSmsBackgroundHandler(SmsMessage message) async {
     );
 
     debugPrint('[SMS Background] Notification fired from background isolate for: ${parsed.upiRefId}');
+
+    // 5. Attempt database write (via FastAPI backend), cache on failure
+    await SmsReceiverService.saveTransactionToBackendOrCache(parsed, body);
   }
 }
 
