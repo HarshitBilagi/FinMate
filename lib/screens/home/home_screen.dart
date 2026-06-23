@@ -11,11 +11,10 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:personal_finance_assistant/providers/dashboard_provider.dart';
-import 'package:personal_finance_assistant/screens/home/widgets/net_worth_card.dart';
+import 'package:personal_finance_assistant/screens/home/widgets/monthly_budget_card.dart';
 import 'package:personal_finance_assistant/screens/home/widgets/transaction_tile.dart';
 import 'package:personal_finance_assistant/screens/transactions/categorize_sheet.dart';
 import 'package:personal_finance_assistant/models/transaction.dart';
-import 'package:personal_finance_assistant/models/card_model.dart';
 import 'package:personal_finance_assistant/services/notification_service.dart';
 import 'package:personal_finance_assistant/screens/transactions/transaction_categorize_modal.dart';
 
@@ -135,10 +134,7 @@ class _HomeScreenState extends State<HomeScreen> {
           // Dynamic notification badge — shows unread count from real SMS data
           Consumer<DashboardProvider>(
             builder: (context, dashboard, _) {
-              final uncategorizedCount = dashboard.recentTransactions.where((t) {
-                final cat = t.category.toLowerCase().trim();
-                return cat == 'uncategorized' || cat.isEmpty;
-              }).length;
+              final uncategorizedCount = dashboard.uncategorized.length;
 
               return Stack(
                 alignment: Alignment.center,
@@ -202,22 +198,20 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    // Card 1: Net Worth
-                    NetWorthCard(
-                      netWorth: dashboard.isLoading ? 0.0 : dashboard.totalNetWorth,
-                      savings: dashboard.isLoading ? 0.0 : dashboard.savingsBalance,
-                      availableCredit: dashboard.isLoading
-                          ? 0.0
-                          : (dashboard.primaryCard?.availableLimit ?? 0.0),
+                    // Card 1: Monthly Budget Card
+                    MonthlyBudgetCard(
+                      provider: dashboard,
                       currencyFormat: _currencyFormat,
                       isDark: isDark,
                     ),
                     const SizedBox(height: 16),
 
-                    // Card 2: ICICI Card Status
+                    // Card 2: ICICI Credit Card Status
                     _ICICICardStatusCard(
                       isLoading: dashboard.isLoading,
-                      card: dashboard.primaryCard,
+                      usedCredit: dashboard.usedCredit,
+                      totalLimit: dashboard.totalCreditLimit,
+                      remainingCredit: dashboard.remainingCredit,
                       currencyFormat: _currencyFormat,
                       isDark: isDark,
                     ),
@@ -253,7 +247,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 8),
 
                     // Transaction List
-                    ...dashboard.recentTransactions.map(
+                    ...dashboard.currentMonthTransactions.map(
                       (txn) => TransactionTile(
                         transaction: txn,
                         currencyFormat: _currencyFormat,
@@ -300,13 +294,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
 class _ICICICardStatusCard extends StatefulWidget {
   final bool isLoading;
-  final CardModel? card;
+  final double usedCredit;
+  final double totalLimit;
+  final double remainingCredit;
   final NumberFormat currencyFormat;
   final bool isDark;
 
   const _ICICICardStatusCard({
     required this.isLoading,
-    required this.card,
+    required this.usedCredit,
+    required this.totalLimit,
+    required this.remainingCredit,
     required this.currencyFormat,
     required this.isDark,
   });
@@ -393,45 +391,75 @@ class _ICICICardStatusCardState extends State<_ICICICardStatusCard> {
       builder: (BuildContext context) {
         if (_isPaid) {
           return AlertDialog(
-            title: const Text('Statement Payment'),
-            content: const Text(
+            backgroundColor: const Color(0xFF121212),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: const BorderSide(color: Color(0xFF333333), width: 1),
+            ),
+            title: Text(
+              'Statement Payment',
+              style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+            content: Text(
               'This billing cycle statement has already been marked as paid. Would you like to mark it as unpaid?',
+              style: GoogleFonts.inter(color: Colors.white),
             ),
             actions: [
               TextButton(
                 onPressed: () {
                   Navigator.of(context).pop();
                 },
-                child: const Text('No'),
+                child: Text(
+                  'No',
+                  style: GoogleFonts.inter(color: const Color(0xFF8E8E93)),
+                ),
               ),
               TextButton(
                 onPressed: () {
                   _togglePaidState(false);
                   Navigator.of(context).pop();
                 },
-                child: const Text('Yes'),
+                child: Text(
+                  'Yes',
+                  style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold),
+                ),
               ),
             ],
           );
         } else {
           return AlertDialog(
-            title: const Text('Statement Payment Confirmation'),
-            content: const Text(
-              'Have you already cleared the due amount of ₹--,---.-- for this billing cycle?',
+            backgroundColor: const Color(0xFF121212),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: const BorderSide(color: Color(0xFF333333), width: 1),
+            ),
+            title: Text(
+              'Statement Payment Confirmation',
+              style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+            content: Text(
+              'Have you already cleared the due amount of ${widget.currencyFormat.format(amount)} for this billing cycle?',
+              style: GoogleFonts.inter(color: Colors.white),
             ),
             actions: [
               TextButton(
                 onPressed: () {
                   Navigator.of(context).pop();
                 },
-                child: const Text('No'),
+                child: Text(
+                  'No',
+                  style: GoogleFonts.inter(color: const Color(0xFF8E8E93)),
+                ),
               ),
               TextButton(
                 onPressed: () {
                   _togglePaidState(true);
                   Navigator.of(context).pop();
                 },
-                child: const Text('Yes'),
+                child: Text(
+                  'Yes',
+                  style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold),
+                ),
               ),
             ],
           );
@@ -448,9 +476,17 @@ class _ICICICardStatusCardState extends State<_ICICICardStatusCard> {
     final formattedDueDate = DateFormat('dd MMM yyyy').format(dueDate);
     
     final daysRemaining = dueDate.difference(today).inDays;
+    
+    final progressValue = widget.totalLimit > 0 
+        ? (widget.usedCredit / widget.totalLimit).clamp(0.0, 1.0) 
+        : 0.0;
+    
+    final progressColor = progressValue > 0.8 
+        ? const Color(0xFFF43F5E) // Red/coral
+        : const Color(0xFF10B981); // Emerald green (original)
 
     return GestureDetector(
-      onTap: widget.isLoading ? null : () => _showPaymentConfirmationDialog(0.0),
+      onTap: widget.isLoading ? null : () => _showPaymentConfirmationDialog(widget.usedCredit),
       child: Card(
         margin: const EdgeInsets.only(bottom: 24),
         child: Padding(
@@ -472,7 +508,7 @@ class _ICICICardStatusCardState extends State<_ICICICardStatusCard> {
                       ),
                       const SizedBox(width: 10),
                       Text(
-                        'ICICI Card Status',
+                        'ICICI CC (XX1008)',
                         style: GoogleFonts.inter(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
@@ -501,7 +537,7 @@ class _ICICICardStatusCardState extends State<_ICICICardStatusCard> {
                     ),
                   ),
                   Text(
-                    '₹--,---.-- / ₹--,---.--',
+                    '₹${widget.usedCredit.toStringAsFixed(2)} / ₹${widget.totalLimit.toStringAsFixed(2)}',
                     style: GoogleFonts.inter(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -514,14 +550,12 @@ class _ICICICardStatusCardState extends State<_ICICICardStatusCard> {
               ClipRRect(
                 borderRadius: BorderRadius.circular(6),
                 child: LinearProgressIndicator(
-                  value: 0.0,
+                  value: progressValue,
                   minHeight: 8,
                   backgroundColor: widget.isDark
                       ? Colors.white.withValues(alpha: 0.08)
                       : Colors.black.withValues(alpha: 0.05),
-                  valueColor: const AlwaysStoppedAnimation<Color>(
-                    Color(0xFF10B981),
-                  ),
+                  valueColor: AlwaysStoppedAnimation<Color>(progressColor),
                 ),
               ),
               const SizedBox(height: 20),
@@ -546,7 +580,7 @@ class _ICICICardStatusCardState extends State<_ICICICardStatusCard> {
                     ),
                   ),
                   Text(
-                    '₹--,---.--',
+                    widget.currencyFormat.format(widget.usedCredit),
                     style: GoogleFonts.inter(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,

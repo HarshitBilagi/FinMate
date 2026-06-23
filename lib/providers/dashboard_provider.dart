@@ -10,6 +10,8 @@ import 'package:personal_finance_assistant/models/card_model.dart';
 import 'package:personal_finance_assistant/models/transaction.dart';
 import 'package:personal_finance_assistant/services/finance_api_client.dart';
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 class DashboardProvider extends ChangeNotifier {
   final FinanceApiClient _apiClient = FinanceApiClient();
 
@@ -21,12 +23,68 @@ class DashboardProvider extends ChangeNotifier {
   List<CardModel> _cards = [];
   final List<Transaction> _recentTransactions = [];
 
+  double _monthlyBudget = 50000.0;
+
   bool get isLoading => _isLoading;
   bool get isCategorizing => _isCategorizing;
   String? get errorMessage => _errorMessage;
   double get savingsBalance => _savingsBalance;
   List<CardModel> get cards => _cards;
   List<Transaction> get recentTransactions => _recentTransactions;
+
+  double get monthlyBudget => _monthlyBudget;
+
+  Future<void> initBudget() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _monthlyBudget = prefs.getDouble('monthly_budget') ?? 50000.0;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Failed to load budget: $e');
+    }
+  }
+
+  Future<void> setMonthlyBudget(double amount) async {
+    _monthlyBudget = amount;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble('monthly_budget', amount);
+    } catch (e) {
+      debugPrint('Failed to save budget: $e');
+    }
+  }
+
+  List<Transaction> get currentMonthTransactions {
+    final now = DateTime.now();
+    return _recentTransactions.where((txn) =>
+        txn.transactedAt.month == now.month &&
+        txn.transactedAt.year == now.year).toList();
+  }
+
+  List<Transaction> get uncategorized {
+    return currentMonthTransactions.where((txn) {
+      final cat = txn.category.toLowerCase().trim();
+      return cat == 'uncategorized' || cat.isEmpty;
+    }).toList();
+  }
+
+  double get totalExpenses {
+    return currentMonthTransactions.fold<double>(
+        0.0, (sum, txn) => sum + txn.amount);
+  }
+
+  double get remainingBudget => _monthlyBudget - totalExpenses;
+
+  double get usedCredit {
+    return currentMonthTransactions
+        .where((txn) => txn.cardId == 'XX1008')
+        .fold<double>(0.0, (sum, txn) => sum + txn.amount);
+  }
+
+  double get totalCreditLimit => 90000.0;
+
+  double get remainingCredit => totalCreditLimit - usedCredit;
 
   /// Total Net Worth = Savings + Sum of Available Credit Limits
   double get totalNetWorth {
@@ -51,6 +109,13 @@ class DashboardProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        _monthlyBudget = prefs.getDouble('monthly_budget') ?? 50000.0;
+      } catch (e) {
+        debugPrint('Failed to load budget in loadDashboard: $e');
+      }
+
       final summary = await _apiClient.fetchDashboardSummary();
       
       _savingsBalance = (summary['total_balance'] ?? 0.0).toDouble();

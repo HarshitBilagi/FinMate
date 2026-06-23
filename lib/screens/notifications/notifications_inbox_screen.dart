@@ -29,10 +29,7 @@ class NotificationsInboxScreen extends StatelessWidget {
       ),
       body: Consumer<DashboardProvider>(
         builder: (context, dashboard, _) {
-          final uncategorizedTransactions = dashboard.recentTransactions.where((t) {
-            final cat = t.category.toLowerCase().trim();
-            return cat == 'uncategorized' || cat.isEmpty;
-          }).toList();
+          final uncategorizedTransactions = dashboard.uncategorized;
 
           if (uncategorizedTransactions.isEmpty) {
             return Center(
