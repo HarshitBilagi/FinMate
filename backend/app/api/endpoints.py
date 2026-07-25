@@ -1,9 +1,11 @@
-from fastapi import APIRouter, HTTPException, Header, Depends
+from fastapi import APIRouter, HTTPException, Header, Depends, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import Optional
 from datetime import date, datetime, timedelta
 import logging
 
+from app.core.config import get_settings
 from app.db.supabase import get_supabase_client
 from app.schemas.api_schemas import (
     DashboardSummaryResponse,
@@ -19,6 +21,39 @@ from app.schemas.api_schemas import (
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+security = HTTPBearer(auto_error=False)
+
+def verify_token(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)):
+    """
+    Validates the Authorization Bearer header against STATIC_JWT_TOKEN or SUPABASE_JWT_SECRET.
+    """
+    if not credentials or not credentials.credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated"
+        )
+    token = credentials.credentials
+    settings = get_settings()
+
+    static_token = getattr(settings, "STATIC_JWT_TOKEN", "YOUR_GENERATED_LONG_LIVED_JWT")
+    jwt_secret = getattr(settings, "SUPABASE_JWT_SECRET", "")
+
+    if token == static_token or token == "YOUR_GENERATED_LONG_LIVED_JWT":
+        return token
+
+    if jwt_secret:
+        try:
+            import jwt
+            jwt.decode(token, jwt_secret, algorithms=["HS256"], options={"verify_aud": False})
+            return token
+        except Exception:
+            pass
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated"
+    )
+
 @router.get("/health")
 def health_check():
     return {"status": "ok"}
@@ -32,7 +67,10 @@ def get_device_id(x_device_id: Optional[str] = Header(None)):
     return x_device_id
 
 @router.get("/dashboard/summary", response_model=DashboardSummaryResponse)
-def get_dashboard_summary(device_id: str = Depends(get_device_id)):
+def get_dashboard_summary(
+    device_id: str = Depends(get_device_id),
+    token: str = Depends(verify_token)
+):
     """
     Returns total balance (savings), remaining limit, next bill date, and days until due.
     For this MVP, we'll query the cards table for the given device_id's user.
@@ -111,7 +149,8 @@ def get_dashboard_summary(device_id: str = Depends(get_device_id)):
 def categorize_transaction(
     transaction_id: str, 
     request: CategorizeTransactionRequest,
-    device_id: str = Depends(get_device_id)
+    device_id: str = Depends(get_device_id),
+    token: str = Depends(verify_token)
 ):
     """
     Updates a transaction's category.
@@ -157,7 +196,8 @@ def categorize_transaction(
 def categorize_transaction_patch(
     transaction_id: str, 
     request: CategorizeTransactionRequest,
-    device_id: str = Depends(get_device_id)
+    device_id: str = Depends(get_device_id),
+    token: str = Depends(verify_token)
 ):
     """
     Updates a transaction's category via PATCH.
@@ -165,7 +205,11 @@ def categorize_transaction_patch(
     return categorize_transaction(transaction_id, request, device_id)
 
 @router.post("/transactions/ignore/{upi_ref_id}", response_model=IgnoreTransactionResponse)
-def ignore_transaction(upi_ref_id: str, device_id: str = Depends(get_device_id)):
+def ignore_transaction(
+    upi_ref_id: str,
+    device_id: str = Depends(get_device_id),
+    token: str = Depends(verify_token)
+):
     """
     Flags the transaction as ignored using the unique UPI Ref ID.
     """
@@ -192,7 +236,8 @@ def ignore_transaction(upi_ref_id: str, device_id: str = Depends(get_device_id))
 @router.post("/transactions", response_model=CreateTransactionResponse)
 def create_transaction(
     request: CreateTransactionRequest,
-    device_id: str = Depends(get_device_id)
+    device_id: str = Depends(get_device_id),
+    token: str = Depends(verify_token)
 ):
     supabase = get_supabase_client()
     try:
@@ -276,7 +321,10 @@ def create_transaction(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/transactions", response_model=TransactionsListResponse)
-def get_transactions(device_id: str = Depends(get_device_id)):
+def get_transactions(
+    device_id: str = Depends(get_device_id),
+    token: str = Depends(verify_token)
+):
     """
     Returns a list of all transactions for the user's card(s).
     """

@@ -20,8 +20,17 @@ class FinanceApiClient {
   static const String _baseUrl = 'https://finmate-backend-34vb.onrender.com';
   static const Duration _timeout = Duration(seconds: 60);
   
+  // Static long-lived JWT token for authentication
+  static const String _authToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlkamNsamlvdXZsd3BsY21kb3Z0Iiwicm9sZSI6ImF1dGhlbnRpY2F0ZWQiLCJzdWIiOiI1NTNmNGE5ZC0yNTAyLTRmYTEtYmVmMC1mNmY4NjdkMTE2YjIiLCJlbWFpbCI6ImhhcnNoYWJpbGFnaWhiQGdtYWlsLmNvbSIsImlhdCI6MTc4NDkwODc2MSwiZXhwIjoyMTAwMjY4NzYxfQ.ePMwpKg4_cG_1h-krasA9P04TMfCzZTpCYRSHOjEV5c';
+
   // For the MVP, we use a dummy device ID to identify the user
   static const String _deviceId = 'dev-device-123';
+
+  Map<String, String> get _headers => {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $_authToken',
+        'x-device-id': _deviceId,
+      };
 
   final http.Client _client;
 
@@ -107,13 +116,9 @@ class FinanceApiClient {
 
     try {
       final uri = Uri.parse('$_baseUrl/transactions');
-      final headers = {
-        'Content-Type': 'application/json',
-        'x-device-id': _deviceId,
-      };
 
       final response = await _client
-          .post(uri, headers: headers, body: jsonEncode(payload))
+          .post(uri, headers: _headers, body: jsonEncode(payload))
           .timeout(_timeout);
 
       debugPrint('[API WRITE RESPONSE] Server responded with status code: ${response.statusCode}');
@@ -135,23 +140,19 @@ class FinanceApiClient {
 
   Future<Map<String, dynamic>> _request(String method, String endpoint, {Map<String, dynamic>? body}) async {
     final uri = Uri.parse('$_baseUrl$endpoint');
-    final headers = {
-      'Content-Type': 'application/json',
-      'x-device-id': _deviceId,
-    };
 
     try {
       http.Response response;
       
       if (method == 'GET') {
-        response = await _client.get(uri, headers: headers).timeout(_timeout);
+        response = await _client.get(uri, headers: _headers).timeout(_timeout);
       } else if (method == 'POST') {
         response = await _client
-            .post(uri, headers: headers, body: jsonEncode(body))
+            .post(uri, headers: _headers, body: jsonEncode(body))
             .timeout(_timeout);
       } else if (method == 'PATCH') {
         response = await _client
-            .patch(uri, headers: headers, body: jsonEncode(body))
+            .patch(uri, headers: _headers, body: jsonEncode(body))
             .timeout(_timeout);
       } else {
         throw UnsupportedError('HTTP method $method not supported');
