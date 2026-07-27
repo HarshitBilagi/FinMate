@@ -23,35 +23,41 @@ logger = logging.getLogger(__name__)
 
 security = HTTPBearer(auto_error=False)
 
-def verify_token(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)):
+def verify_token(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> dict:
     """
-    Validates the Authorization Bearer header against STATIC_JWT_TOKEN or SUPABASE_JWT_SECRET.
+    Validates the Authorization Bearer header against SUPABASE_JWT_SECRET 
+    and returns the decoded user payload (including user_id/sub).
     """
     if not credentials or not credentials.credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated"
         )
+    
     token = credentials.credentials
     settings = get_settings()
-
+    jwt_secret = settings.SUPABASE_JWT_SECRET
     static_token = getattr(settings, "STATIC_JWT_TOKEN", "YOUR_GENERATED_LONG_LIVED_JWT")
-    jwt_secret = getattr(settings, "SUPABASE_JWT_SECRET", "")
-
-    if token == static_token or token == "YOUR_GENERATED_LONG_LIVED_JWT":
-        return token
 
     if jwt_secret:
         try:
             import jwt
-            jwt.decode(token, jwt_secret, algorithms=["HS256"], options={"verify_aud": False})
-            return token
-        except Exception:
-            pass
+            # Decodes the token using your Supabase secret
+            payload = jwt.decode(token, jwt_secret, algorithms=["HS256"], options={"verify_aud": False})
+            return payload  # Returns dict containing 'sub' (User UID) and 'email'
+        except Exception as e:
+            logger.error(f"JWT Verification failed: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token signature"
+            )
+
+    if token == static_token or token == "YOUR_GENERATED_LONG_LIVED_JWT":
+        return {"sub": "dev-user-id", "email": "dev@example.com"}
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Not authenticated"
+        detail="Server authentication misconfigured"
     )
 
 @router.get("/health")

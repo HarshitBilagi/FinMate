@@ -63,3 +63,4 @@ env
 .env
 google-services.json
 backend/firebase_service_account.json
+CusJWTGenerator.py
