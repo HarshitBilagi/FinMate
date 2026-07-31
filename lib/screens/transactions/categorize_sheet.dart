@@ -36,6 +36,7 @@ class _CategorizeSheetState extends State<CategorizeSheet> {
     _CategoryOption('subscriptions', Icons.subscriptions_outlined, Color(0xFF78716C)),
     _CategoryOption('groceries', Icons.local_grocery_store_outlined, Color(0xFF84CC16)),
     _CategoryOption('transportion', Icons.directions_car_outlined, Color(0xFF3B82F6)),
+    _CategoryOption('medicine', Icons.medical_services_outlined, Color(0xFF14B8A6)),
   ];
 
   Future<void> _onCategoryTap(String categoryName) async {

@@ -83,11 +83,12 @@ def get_dashboard_summary(
     """
     supabase = get_supabase_client()
     try:
+        now = datetime.now()
+        start_of_month = datetime(now.year, now.month, 1).isoformat()
+
         # Find user by device_id
         user_res = supabase.table("users").select("id").eq("device_id", device_id).execute()
         if not user_res.data:
-            # For MVP, if user doesn't exist, return mock dashboard data 
-            # to allow Flutter to work without a strict backend seed.
             logger.warning(f"User with device {device_id} not found. Returning mock data.")
             today = date.today()
             next_bill = date(today.year, today.month, 15)
@@ -105,22 +106,34 @@ def get_dashboard_summary(
 
         user_id = user_res.data[0]['id']
         
-        # Get primary card
-        cards_res = supabase.table("cards").select("*").eq("user_id", user_id).limit(1).execute()
+        cards_res = supabase.table("cards").select("*").eq("user_id", user_id).execute()
         if not cards_res.data:
-            raise HTTPException(status_code=404, detail="No active cards found for user.")
-            
+            today = date.today()
+            return DashboardSummaryResponse(
+                total_balance=45320.50,
+                total_limit=90000.00,
+                remaining_limit=90000.00,
+                next_bill_date=date(today.year, today.month, 15),
+                days_until_due=20
+            )
+
         card = cards_res.data[0]
-        
-        # Calculate dates based on billing cycle day
+        card_ids = [c['id'] for c in cards_res.data]
+
+        # Calculate current month outflow strictly (.gte("transacted_at", start_of_month))
+        txns_res = supabase.table("transactions").select("amount, transaction_type").in_("card_id", card_ids).gte("transacted_at", start_of_month).execute()
+        month_outflow = sum(
+            float(t['amount']) for t in txns_res.data if t.get('transaction_type', 'debit') == 'debit'
+        )
+
+        total_limit = float(card.get('total_limit', 90000.00))
+        remaining_limit = max(0.0, total_limit - month_outflow)
+
         today = date.today()
         billing_day = card.get('billing_cycle_day', 1)
-        
-        # Handle month rollover for billing date
         try:
             next_bill = date(today.year, today.month, billing_day)
         except ValueError:
-            # Handle cases like Feb 30 -> jump to next valid or use next month
             next_bill = date(today.year, today.month, 28)
             
         if next_bill <= today:
@@ -131,18 +144,13 @@ def get_dashboard_summary(
             except ValueError:
                 next_bill = date(year, month, 28)
                 
-        # Due date is typically 20 days after bill date
         due_date = next_bill + timedelta(days=20)
         days_until_due = (due_date - today).days
         
-        # We assume total_balance (savings) is static for now 
-        # or would be fetched from a bank account table
-        total_balance = 45320.50 
-        
         return DashboardSummaryResponse(
-            total_balance=total_balance,
-            total_limit=90000.00,
-            remaining_limit=float(card.get('available_limit', 0.0)),
+            total_balance=45320.50,
+            total_limit=total_limit,
+            remaining_limit=remaining_limit,
             next_bill_date=next_bill,
             days_until_due=days_until_due
         )
@@ -277,6 +285,8 @@ def create_transaction(
         
         # Use client-parsed SMS date when provided, else fallback to server time
         transacted_at = request.transaction_date if request.transaction_date else datetime.now().isoformat()
+        txn_category = request.category if request.category else "uncategorized"
+        txn_type = request.transaction_type if request.transaction_type else "debit"
         
         # Insert transaction
         txn_data = {
@@ -284,9 +294,9 @@ def create_transaction(
             "upi_ref_id": request.upi_ref_id,
             "amount": request.amount,
             "merchant": request.merchant,
-            "category": "uncategorized",
-            "transaction_type": "debit",
-            "is_refund": False,
+            "category": txn_category,
+            "transaction_type": txn_type,
+            "is_refund": (txn_type == "credit"),
             "source": request.source,
             "raw_message": request.raw_message,
             "transacted_at": transacted_at
@@ -332,10 +342,13 @@ def get_transactions(
     token: str = Depends(verify_token)
 ):
     """
-    Returns a list of all transactions for the user's card(s).
+    Returns a list of all transactions for the user's card(s) in the current calendar month.
     """
     supabase = get_supabase_client()
     try:
+        now = datetime.now()
+        start_of_month = datetime(now.year, now.month, 1).isoformat()
+
         # Find user by device_id
         user_res = supabase.table("users").select("id").eq("device_id", device_id).execute()
         if not user_res.data:
@@ -350,8 +363,8 @@ def get_transactions(
             
         card_ids = [card['id'] for card in cards_res.data]
         
-        # Get all transactions for these card(s)
-        txns_res = supabase.table("transactions").select("*").in_("card_id", card_ids).order("transacted_at", desc=True).execute()
+        # Get transactions for current calendar month strictly (.gte("transacted_at", start_of_month))
+        txns_res = supabase.table("transactions").select("*").in_("card_id", card_ids).gte("transacted_at", start_of_month).order("transacted_at", desc=True).execute()
         
         transactions = []
         for txn in txns_res.data:

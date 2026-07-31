@@ -30,6 +30,8 @@ class CreateTransactionRequest(BaseModel):
     raw_message: str
     source: str = "sms"
     transaction_date: Optional[str] = None
+    category: Optional[str] = "uncategorized"
+    transaction_type: Optional[str] = "debit"
 
 class CreateTransactionResponse(BaseModel):
     id: str

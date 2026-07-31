@@ -78,6 +78,7 @@ class ExpensesScreen extends StatelessWidget {
             'subscriptions': 0.0,
             'groceries': 0.0,
             'transportion': 0.0,
+            'medicine': 0.0,
             'uncategorized': 0.0,
           };
 
@@ -104,7 +105,8 @@ class ExpensesScreen extends StatelessWidget {
               categoryTotals['eggs']! +
               categoryTotals['gym fees']! +
               categoryTotals['groceries']! +
-              categoryTotals['transportion']!;
+              categoryTotals['transportion']! +
+              categoryTotals['medicine']!;
 
           final double variablesTotal = categoryTotals['beverages']! +
               categoryTotals['outside food']! +

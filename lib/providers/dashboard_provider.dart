@@ -383,4 +383,67 @@ class DashboardProvider extends ChangeNotifier {
       return success;
     }
   }
+
+  /// Adds a manually created transaction from the app UI.
+  Future<bool> addManualTransaction({
+    required double amount,
+    required String merchant,
+    required DateTime transactionDate,
+    required String category,
+    required String paymentMode,
+    required String transactionType,
+  }) async {
+    final upiRefId = 'manual-${DateTime.now().millisecondsSinceEpoch}';
+    final tempId = 'txn-${DateTime.now().millisecondsSinceEpoch}';
+
+    final newTxn = Transaction(
+      id: tempId,
+      cardId: paymentMode,
+      upiRefId: upiRefId,
+      amount: amount,
+      merchant: merchant,
+      category: category,
+      transactionType: transactionType,
+      transactedAt: transactionDate,
+      source: 'manual',
+      isProcessing: true,
+    );
+
+    _recentTransactions.insert(0, newTxn);
+    notifyListeners();
+
+    try {
+      final createResponse = await _apiClient.createTransaction(
+        upiRefId: upiRefId,
+        amount: amount,
+        merchant: merchant,
+        cardMasked: paymentMode,
+        rawMessage: 'Manual transaction added via app',
+        source: 'manual',
+        transactionDate: transactionDate,
+        category: category,
+        transactionType: transactionType,
+      );
+
+      final realId = createResponse['id'] ?? tempId;
+
+      final idxUpdated = _recentTransactions.indexWhere((t) => t.upiRefId == upiRefId);
+      if (idxUpdated != -1) {
+        _recentTransactions[idxUpdated] = _recentTransactions[idxUpdated].copyWith(
+          id: realId,
+          isProcessing: false,
+        );
+      }
+      notifyListeners();
+
+      await Future.delayed(const Duration(milliseconds: 500));
+      await _silentRefresh();
+      return true;
+    } catch (e) {
+      _recentTransactions.removeWhere((t) => t.upiRefId == upiRefId);
+      _errorMessage = "Failed to add manual transaction: $e";
+      notifyListeners();
+      return false;
+    }
+  }
 }

@@ -29,6 +29,7 @@ class TransactionsScreen extends StatelessWidget {
       'subscriptions' => const Color(0xFF78716C),
       'groceries' => const Color(0xFF84CC16),
       'transportion' || 'transportation' || 'transport' => const Color(0xFF3B82F6),
+      'medicine' => const Color(0xFF14B8A6),
       'ignored' => Colors.grey,
       _ => const Color(0xFF94A3B8), // uncategorized
     };

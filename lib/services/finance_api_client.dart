@@ -84,6 +84,8 @@ class FinanceApiClient {
     required String rawMessage,
     String source = 'sms',
     DateTime? transactionDate,
+    String category = 'uncategorized',
+    String transactionType = 'debit',
   }) async {
     final payload = <String, dynamic>{
       'upi_ref_id': upiRefId,
@@ -92,7 +94,8 @@ class FinanceApiClient {
       'card_masked': cardMasked,
       'raw_message': rawMessage,
       'source': source,
-      'transaction_type': 'debit',
+      'category': category,
+      'transaction_type': transactionType,
     };
     if (transactionDate != null) {
       payload['transaction_date'] = transactionDate.toIso8601String();
