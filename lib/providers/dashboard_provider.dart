@@ -71,7 +71,9 @@ class DashboardProvider extends ChangeNotifier {
 
   double get totalExpenses {
     return currentMonthTransactions.fold<double>(
-        0.0, (sum, txn) => sum + txn.amount);
+        0.0, (sum, txn) => (txn.transactionType == 'credit' || txn.isRefund)
+            ? sum - txn.amount
+            : sum + txn.amount);
   }
 
   double get remainingBudget => _monthlyBudget - totalExpenses;
@@ -221,6 +223,36 @@ class DashboardProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('[API SILENT REFRESH] Failed: $e');
       // Silent refresh failures are non-fatal — the optimistic state is still valid
+    }
+  }
+
+  /// Permanently deletes a transaction locally and on the backend.
+  Future<bool> deleteTransaction(String transactionId) async {
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final idx = _recentTransactions.indexWhere((t) => t.id == transactionId);
+      if (idx != -1) {
+        final txn = _recentTransactions[idx];
+        _recentTransactions.removeAt(idx);
+        notifyListeners();
+
+        if (!txn.id.startsWith('txn-')) {
+          await _apiClient.deleteTransaction(transactionId);
+        }
+      }
+
+      await _silentRefresh();
+      return true;
+    } on FinanceApiException catch (e) {
+      _errorMessage = e.message;
+      return false;
+    } catch (e) {
+      _errorMessage = "Failed to delete transaction: $e";
+      return false;
+    } finally {
+      notifyListeners();
     }
   }
 

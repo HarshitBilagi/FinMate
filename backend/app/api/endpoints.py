@@ -121,13 +121,18 @@ def get_dashboard_summary(
         card_ids = [c['id'] for c in cards_res.data]
 
         # Calculate current month outflow strictly (.gte("transacted_at", start_of_month))
+        # debit increases outflow, credit reduces outflow
         txns_res = supabase.table("transactions").select("amount, transaction_type").in_("card_id", card_ids).gte("transacted_at", start_of_month).execute()
-        month_outflow = sum(
+        debit_total = sum(
             float(t['amount']) for t in txns_res.data if t.get('transaction_type', 'debit') == 'debit'
         )
+        credit_total = sum(
+            float(t['amount']) for t in txns_res.data if t.get('transaction_type') == 'credit'
+        )
+        month_outflow = debit_total - credit_total
 
         total_limit = float(card.get('total_limit', 90000.00))
-        remaining_limit = max(0.0, total_limit - month_outflow)
+        remaining_limit = total_limit - month_outflow
 
         today = date.today()
         billing_day = card.get('billing_cycle_day', 1)
@@ -394,4 +399,39 @@ def get_transactions(
         
     except Exception as e:
         logger.error(f"Error fetching transactions: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@router.delete("/transactions/{transaction_id}")
+def delete_transaction(
+    transaction_id: str,
+    device_id: str = Depends(get_device_id),
+    token: dict = Depends(verify_token)
+):
+    """
+    Permanently deletes a transaction by ID.
+    """
+    supabase = get_supabase_client()
+    try:
+        txn_res = supabase.table("transactions").select("id, card_id, amount, transaction_type").eq("id", transaction_id).execute()
+        if not txn_res.data:
+            raise HTTPException(status_code=404, detail=f"Transaction with ID {transaction_id} not found")
+            
+        txn = txn_res.data[0]
+        card_id = txn['card_id']
+        amount = float(txn.get('amount', 0.0))
+        txn_type = txn.get('transaction_type', 'debit')
+
+        del_res = supabase.table("transactions").delete().eq("id", transaction_id).execute()
+
+        card_res = supabase.table("cards").select("available_limit").eq("id", card_id).execute()
+        if card_res.data:
+            curr_limit = float(card_res.data[0]['available_limit'])
+            updated_limit = curr_limit + amount if txn_type == 'debit' else curr_limit - amount
+            supabase.table("cards").update({"available_limit": updated_limit}).eq("id", card_id).execute()
+
+        return {"message": "Transaction deleted successfully", "id": transaction_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting transaction {transaction_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")

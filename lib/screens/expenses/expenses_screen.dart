@@ -86,13 +86,16 @@ class ExpensesScreen extends StatelessWidget {
           for (final txn in transactions) {
             final cat = txn.category.toLowerCase().trim();
             final resolvedCat = (cat == 'transportation' || cat == 'transport') ? 'transportion' : cat;
+            final isCredit = txn.transactionType == 'credit' || txn.isRefund;
+            final signedAmount = isCredit ? -txn.amount : txn.amount;
+
             if (categoryTotals.containsKey(resolvedCat)) {
-              categoryTotals[resolvedCat] = categoryTotals[resolvedCat]! + txn.amount;
-              totalOutflow += txn.amount;
+              categoryTotals[resolvedCat] = categoryTotals[resolvedCat]! + signedAmount;
+              totalOutflow += signedAmount;
             } else {
               categoryTotals['uncategorized'] =
-                  categoryTotals['uncategorized']! + txn.amount;
-              totalOutflow += txn.amount;
+                  categoryTotals['uncategorized']! + signedAmount;
+              totalOutflow += signedAmount;
             }
           }
 

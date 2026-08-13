@@ -26,11 +26,14 @@ void nativeSmsBackgroundHandler(SmsMessage message) async {
 
   // 2. Initialize a LOCAL FlutterLocalNotificationsPlugin for this isolate
   final bgNotificationsPlugin = FlutterLocalNotificationsPlugin();
-  const androidSettings = AndroidInitializationSettings('@mipmap/launcher_icon');
+  const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
   const initSettings = InitializationSettings(android: androidSettings);
-  await bgNotificationsPlugin.initialize(initSettings);
-
-  debugPrint('[SMS Background] Local notifications plugin initialized in background isolate.');
+  try {
+    await bgNotificationsPlugin.initialize(initSettings);
+    debugPrint('[SMS Background] Local notifications plugin initialized in background isolate.');
+  } catch (e) {
+    debugPrint('[SMS Background] Warning initializing notifications in background: $e');
+  }
 
   // 3. Parse the SMS body using shared regex logic
   final parsed = SmsReceiverService.parseSmsBody(body);
@@ -81,19 +84,23 @@ class SmsReceiverService {
 
   /// Initialize local notifications and handle deep-linking taps
   static Future<void> initialize() async {
-    const androidSettings = AndroidInitializationSettings('@mipmap/launcher_icon');
+    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const initSettings = InitializationSettings(android: androidSettings);
 
-    await _localNotifications.initialize(
-      initSettings,
-      onDidReceiveNotificationResponse: (NotificationResponse response) {
-        // Foreground tap — HomeScreen is already mounted, safe to push to stream
-        final payload = response.payload;
-        if (payload != null && payload.isNotEmpty) {
-          _handleNotificationPayload(payload);
-        }
-      },
-    );
+    try {
+      await _localNotifications.initialize(
+        initSettings,
+        onDidReceiveNotificationResponse: (NotificationResponse response) {
+          // Foreground tap — HomeScreen is already mounted, safe to push to stream
+          final payload = response.payload;
+          if (payload != null && payload.isNotEmpty) {
+            _handleNotificationPayload(payload);
+          }
+        },
+      );
+    } catch (e) {
+      debugPrint('[Notification Service] Warning initializing notifications: $e');
+    }
 
     // Cold-start: app was launched by tapping a notification while killed.
     // Do NOT push to the stream here — no widget is listening yet.

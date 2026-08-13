@@ -11,114 +11,190 @@ import 'package:intl/intl.dart';
 import 'package:personal_finance_assistant/core/theme/app_theme.dart';
 import 'package:personal_finance_assistant/models/transaction.dart';
 
+import 'package:provider/provider.dart';
+import 'package:personal_finance_assistant/providers/dashboard_provider.dart';
+
 class TransactionTile extends StatelessWidget {
   final Transaction transaction;
   final NumberFormat currencyFormat;
   final VoidCallback onCategorize;
+  final VoidCallback? onDelete;
 
   const TransactionTile({
     super.key,
     required this.transaction,
     required this.currencyFormat,
     required this.onCategorize,
+    this.onDelete,
   });
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isRefund = transaction.isRefund;
-    final amountColor = isRefund ? AppTheme.income : AppTheme.expense;
-    final amountPrefix = isRefund ? '+' : '-';
+    final isCredit = transaction.isRefund || transaction.transactionType == 'credit';
+    final amountColor = isCredit ? AppTheme.income : AppTheme.expense;
+    final amountPrefix = isCredit ? '+' : '-';
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: isDark ? AppTheme.cardDark1 : AppTheme.cardLight1,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.06)
-              : Colors.black.withValues(alpha: 0.06),
-        ),
-      ),
-      child: ListTile(
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        leading: Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: _categoryColor(transaction.category)
-                .withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: transaction.isProcessing
-              ? Center(
-                  child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.0,
-                      color: _categoryColor(transaction.category),
-                    ),
-                  ),
-                )
-              : Icon(
-                  _categoryIcon(transaction.category),
-                  color: _categoryColor(transaction.category),
-                  size: 22,
+    return Dismissible(
+      key: Key(transaction.id),
+      direction: DismissDirection.endToStart,
+      confirmDismiss: (direction) async {
+        return await showDialog<bool>(
+          context: context,
+          builder: (BuildContext dialogContext) {
+            return AlertDialog(
+              backgroundColor: isDark ? const Color(0xFF121212) : Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(
+                  color: isDark ? const Color(0xFF333333) : const Color(0xFFE2E8F0),
                 ),
-        ),
-        title: Text(
-          transaction.merchant ?? 'Unknown',
-          style: GoogleFonts.inter(
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
-          ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        subtitle: Row(
-          children: [
-            Text(
-              DateFormat('dd MMM, hh:mm a').format(transaction.transactedAt),
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.45)
-                    : Colors.black.withValues(alpha: 0.45),
               ),
-            ),
-            if (transaction.category == 'uncategorized') ...[
-              const SizedBox(width: 8),
-              GestureDetector(
-                onTap: onCategorize,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppTheme.warning.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
+              title: Text(
+                'Delete Transaction?',
+                style: GoogleFonts.inter(
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                ),
+              ),
+              content: Text(
+                'Are you sure you want to delete "${transaction.merchant ?? 'Transaction'}" (${currencyFormat.format(transaction.amount)})?',
+                style: GoogleFonts.inter(
+                  color: isDark ? const Color(0xFF8E8E93) : const Color(0xFF64748B),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
                   child: Text(
-                    'Categorize',
+                    'Cancel',
                     style: GoogleFonts.inter(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.warning,
+                      color: isDark ? const Color(0xFF8E8E93) : const Color(0xFF64748B),
                     ),
                   ),
                 ),
-              ),
-            ],
-          ],
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: Text(
+                    'Delete',
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFFF43F5E),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ) ?? false;
+      },
+      onDismissed: (direction) {
+        if (onDelete != null) {
+          onDelete!();
+        } else {
+          context.read<DashboardProvider>().deleteTransaction(transaction.id);
+        }
+      },
+      background: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF43F5E),
+          borderRadius: BorderRadius.circular(16),
         ),
-        trailing: Text(
-          '$amountPrefix${currencyFormat.format(transaction.amount)}',
-          style: GoogleFonts.inter(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: amountColor,
+        child: const Icon(Icons.delete_outline, color: Colors.white, size: 26),
+      ),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: isDark ? AppTheme.cardDark1 : AppTheme.cardLight1,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.06)
+                : Colors.black.withValues(alpha: 0.06),
+          ),
+        ),
+        child: ListTile(
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          leading: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: _categoryColor(transaction.category)
+                  .withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: transaction.isProcessing
+                ? Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.0,
+                        color: _categoryColor(transaction.category),
+                      ),
+                    ),
+                  )
+                : Icon(
+                    _categoryIcon(transaction.category),
+                    color: _categoryColor(transaction.category),
+                    size: 22,
+                  ),
+          ),
+          title: Text(
+            transaction.merchant ?? 'Unknown',
+            style: GoogleFonts.inter(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: Row(
+            children: [
+              Text(
+                DateFormat('dd MMM, hh:mm a').format(transaction.transactedAt),
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.45)
+                      : Colors.black.withValues(alpha: 0.45),
+                ),
+              ),
+              if (transaction.category == 'uncategorized') ...[
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: onCategorize,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppTheme.warning.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      'Categorize',
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.warning,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          trailing: Text(
+            '$amountPrefix${currencyFormat.format(transaction.amount)}',
+            style: GoogleFonts.inter(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: amountColor,
+            ),
           ),
         ),
       ),

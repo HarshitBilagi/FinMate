@@ -107,13 +107,81 @@ class _CategorizeSheetState extends State<CategorizeSheet> {
             ),
             const SizedBox(height: 20),
 
-            // Title
-            Text(
-              'Categorize Transaction',
-              style: GoogleFonts.inter(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-              ),
+            // Title & Delete action
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Categorize Transaction',
+                  style: GoogleFonts.inter(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, color: Color(0xFFF43F5E)),
+                  tooltip: 'Delete Transaction',
+                  onPressed: () async {
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (dialogCtx) => AlertDialog(
+                        backgroundColor: isDark ? const Color(0xFF121212) : Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          side: BorderSide(
+                            color: isDark ? const Color(0xFF333333) : const Color(0xFFE2E8F0),
+                          ),
+                        ),
+                        title: Text(
+                          'Delete Transaction?',
+                          style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w700,
+                            color: isDark ? Colors.white : const Color(0xFF0F172A),
+                          ),
+                        ),
+                        content: Text(
+                          'Are you sure you want to delete "${widget.transaction.merchant ?? 'Transaction'}"?',
+                          style: GoogleFonts.inter(
+                            color: isDark ? const Color(0xFF8E8E93) : const Color(0xFF64748B),
+                          ),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(dialogCtx).pop(false),
+                            child: Text(
+                              'Cancel',
+                              style: GoogleFonts.inter(
+                                color: isDark ? const Color(0xFF8E8E93) : const Color(0xFF64748B),
+                              ),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.of(dialogCtx).pop(true),
+                            child: Text(
+                              'Delete',
+                              style: GoogleFonts.inter(
+                                color: const Color(0xFFF43F5E),
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (confirm == true && context.mounted) {
+                      final provider = context.read<DashboardProvider>();
+                      await provider.deleteTransaction(widget.transaction.id);
+                      if (context.mounted) {
+                        Navigator.of(context).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Transaction deleted')),
+                        );
+                      }
+                    }
+                  },
+                ),
+              ],
             ),
             const SizedBox(height: 16),
 

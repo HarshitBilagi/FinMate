@@ -75,6 +75,14 @@ class FinanceApiClient {
     );
   }
 
+  /// Permanently deletes a transaction on the backend by ID.
+  Future<Map<String, dynamic>> deleteTransaction(String transactionId) async {
+    return _request(
+      'DELETE',
+      '/transactions/$transactionId',
+    );
+  }
+
   /// Creates a new transaction parsed by the local SMS receiver on the backend.
   Future<Map<String, dynamic>> createTransaction({
     required String upiRefId,
@@ -157,6 +165,8 @@ class FinanceApiClient {
         response = await _client
             .patch(uri, headers: _headers, body: jsonEncode(body))
             .timeout(_timeout);
+      } else if (method == 'DELETE') {
+        response = await _client.delete(uri, headers: _headers).timeout(_timeout);
       } else {
         throw UnsupportedError('HTTP method $method not supported');
       }
