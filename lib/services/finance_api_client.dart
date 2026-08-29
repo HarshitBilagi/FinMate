@@ -83,6 +83,21 @@ class FinanceApiClient {
     );
   }
 
+  /// Categorizes multiple transactions at once on the backend.
+  Future<Map<String, dynamic>> batchCategorize({
+    required List<String> transactionIds,
+    required String category,
+  }) async {
+    return _request(
+      'POST',
+      '/transactions/batch-categorize',
+      body: {
+        'transaction_ids': transactionIds,
+        'category': category,
+      },
+    );
+  }
+
   /// Creates a new transaction parsed by the local SMS receiver on the backend.
   Future<Map<String, dynamic>> createTransaction({
     required String upiRefId,

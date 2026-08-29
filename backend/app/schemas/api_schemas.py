@@ -18,6 +18,16 @@ class CategorizeTransactionResponse(BaseModel):
     remaining_limit: float  # Returned as per rubric
     message: str
 
+class BatchCategorizeRequest(BaseModel):
+    transaction_ids: List[str]
+    category: str
+
+class BatchCategorizeResponse(BaseModel):
+    transaction_ids: List[str]
+    category: str
+    updated_count: int
+    message: str
+
 class IgnoreTransactionResponse(BaseModel):
     upi_ref_id: str
     message: str

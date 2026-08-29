@@ -11,6 +11,8 @@ from app.schemas.api_schemas import (
     DashboardSummaryResponse,
     CategorizeTransactionRequest,
     CategorizeTransactionResponse,
+    BatchCategorizeRequest,
+    BatchCategorizeResponse,
     IgnoreTransactionResponse,
     CreateTransactionRequest,
     CreateTransactionResponse,
@@ -223,6 +225,41 @@ def categorize_transaction_patch(
     """
     return categorize_transaction(transaction_id, request, device_id)
 
+@router.post("/transactions/batch-categorize", response_model=BatchCategorizeResponse)
+def batch_categorize_transactions(
+    request: BatchCategorizeRequest,
+    device_id: str = Depends(get_device_id),
+    token: dict = Depends(verify_token)
+):
+    """
+    Updates the category for multiple transactions at once.
+    """
+    supabase = get_supabase_client()
+    try:
+        if not request.transaction_ids:
+            return BatchCategorizeResponse(
+                transaction_ids=[],
+                category=request.category,
+                updated_count=0,
+                message="No transactions provided to categorize"
+            )
+
+        update_res = supabase.table("transactions").update({
+            "category": request.category
+        }).in_("id", request.transaction_ids).execute()
+
+        count = len(update_res.data) if update_res.data else len(request.transaction_ids)
+
+        return BatchCategorizeResponse(
+            transaction_ids=request.transaction_ids,
+            category=request.category,
+            updated_count=count,
+            message=f"{count} transactions categorized as {request.category}"
+        )
+    except Exception as e:
+        logger.error(f"Error in batch categorize: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 @router.post("/transactions/ignore/{upi_ref_id}", response_model=IgnoreTransactionResponse)
 def ignore_transaction(
     upi_ref_id: str,
@@ -289,7 +326,15 @@ def create_transaction(
         current_limit = float(card['available_limit'])
         
         # Use client-parsed SMS date when provided, else fallback to server time
-        transacted_at = request.transaction_date if request.transaction_date else datetime.now().isoformat()
+        now = datetime.now()
+        if request.transaction_date:
+            transacted_at = request.transaction_date
+            # Ensure full ISO timestamp if only date was provided (e.g. "2026-08-29")
+            if "T" not in transacted_at and " " not in transacted_at:
+                transacted_at = f"{transacted_at}T{now.strftime('%H:%M:%S')}.000Z"
+        else:
+            transacted_at = now.isoformat()
+
         txn_category = request.category if request.category else "uncategorized"
         txn_type = request.transaction_type if request.transaction_type else "debit"
         

@@ -18,6 +18,7 @@ import 'package:personal_finance_assistant/screens/transactions/add_transaction_
 import 'package:personal_finance_assistant/models/transaction.dart';
 import 'package:personal_finance_assistant/services/notification_service.dart';
 import 'package:personal_finance_assistant/screens/transactions/transaction_categorize_modal.dart';
+import 'package:personal_finance_assistant/screens/transactions/batch_categorize_sheet.dart';
 
 import 'package:personal_finance_assistant/core/services/sms_receiver_service.dart';
 
@@ -36,8 +37,7 @@ class _HomeScreenState extends State<HomeScreen> {
   );
 
   StreamSubscription<TransactionNotification>? _notificationSubscription;
-
-
+  final Set<String> _selectedTxnIds = {};
 
   @override
   void initState() {
@@ -52,24 +52,58 @@ class _HomeScreenState extends State<HomeScreen> {
     _notificationSubscription =
         NotificationService().onTransactionReceived.listen((notification) {
       if (mounted) {
-        final dashboard = context.read<DashboardProvider>();
-        final matchingTxns = dashboard.recentTransactions.where((t) => t.upiRefId == notification.upiRefId);
-        TransactionNotification latestNotification = notification;
-        if (matchingTxns.isNotEmpty) {
-          final latestTxn = matchingTxns.first;
-          latestNotification = TransactionNotification(
-            transactionId: latestTxn.id,
-            amount: latestTxn.amount.toString(),
-            merchant: latestTxn.merchant ?? notification.merchant,
-            upiRefId: latestTxn.upiRefId,
-            cardMasked: latestTxn.cardId,
-            action: latestTxn.category,
-            transactionDate: latestTxn.transactedAt,
-          );
-        }
-        _showTransactionCategorizeModal(context, latestNotification);
+        _showTransactionCategorizeModal(context, notification);
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _notificationSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _toggleSelect(String id) {
+    setState(() {
+      if (_selectedTxnIds.contains(id)) {
+        _selectedTxnIds.remove(id);
+      } else {
+        _selectedTxnIds.add(id);
+      }
+    });
+  }
+
+  void _clearSelection() {
+    setState(() {
+      _selectedTxnIds.clear();
+    });
+  }
+
+  void _selectAll(List<Transaction> txns) {
+    setState(() {
+      _selectedTxnIds.addAll(txns.map((t) => t.id));
+    });
+  }
+
+  Future<void> _openBatchCategorize(BuildContext context) async {
+    if (_selectedTxnIds.isEmpty) return;
+
+    final dashboard = context.read<DashboardProvider>();
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => ChangeNotifierProvider.value(
+        value: dashboard,
+        child: BatchCategorizeSheet(
+          transactionIds: _selectedTxnIds.toList(),
+        ),
+      ),
+    );
+
+    if (result == true) {
+      _clearSelection();
+    }
   }
 
   /// Drain any cold-start notification payload that was staged in SharedPreferences
@@ -77,29 +111,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _drainPendingTransaction() async {
     final pending = await SmsReceiverService.drainPendingNotification();
     if (pending != null && mounted) {
-      final dashboard = context.read<DashboardProvider>();
-      final matchingTxns = dashboard.recentTransactions.where((t) => t.upiRefId == pending.upiRefId);
-      TransactionNotification latestNotification = pending;
-      if (matchingTxns.isNotEmpty) {
-        final latestTxn = matchingTxns.first;
-        latestNotification = TransactionNotification(
-          transactionId: latestTxn.id,
-          amount: latestTxn.amount.toString(),
-          merchant: latestTxn.merchant ?? pending.merchant,
-          upiRefId: latestTxn.upiRefId,
-          cardMasked: latestTxn.cardId,
-          action: latestTxn.category,
-          transactionDate: latestTxn.transactedAt,
-        );
-      }
-      _showTransactionCategorizeModal(context, latestNotification);
+      _showTransactionCategorizeModal(context, pending);
     }
-  }
-
-  @override
-  void dispose() {
-    _notificationSubscription?.cancel();
-    super.dispose();
   }
 
   void _showTransactionCategorizeModal(
@@ -122,6 +135,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isSelectionMode = _selectedTxnIds.isNotEmpty;
 
     return Scaffold(
       appBar: AppBar(
@@ -138,7 +152,9 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(width: 10),
             Text(
-              'A Finance Sidekick',
+              isSelectionMode
+                  ? '${_selectedTxnIds.length} Selected'
+                  : 'A Finance Sidekick',
               style: GoogleFonts.inter(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
@@ -147,53 +163,60 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.bar_chart_rounded),
-            onPressed: () => Navigator.of(context).pushNamed('/expenses'),
-          ),
-          // Dynamic notification badge — shows unread count from real SMS data
-          Consumer<DashboardProvider>(
-            builder: (context, dashboard, _) {
-              final uncategorizedCount = dashboard.uncategorized.length;
+          if (isSelectionMode) ...[
+            TextButton(
+              onPressed: _clearSelection,
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? const Color(0xFF2DD4BF) : const Color(0xFF0D9488),
+                ),
+              ),
+            ),
+          ] else ...[
+            IconButton(
+              icon: const Icon(Icons.bar_chart_rounded),
+              tooltip: 'Expense Analytics & PDF Export',
+              onPressed: () => Navigator.of(context).pushNamed('/expenses'),
+            ),
+            Consumer<DashboardProvider>(
+              builder: (context, dashboard, _) {
+                final uncategorizedCount = dashboard.uncategorized.length;
 
-              return Stack(
-                alignment: Alignment.center,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.notifications_outlined),
-                    onPressed: () => Navigator.of(context).pushNamed('/notifications'),
-                  ),
-                  if (uncategorizedCount > 0)
-                    Positioned(
-                      top: 6,
-                      right: 6,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFF43F5E),
-                          shape: BoxShape.circle,
-                        ),
-                        constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-                        child: Text(
-                          '$uncategorizedCount',
-                          style: GoogleFonts.inter(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
+                return Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.notifications_outlined),
+                      onPressed: () => Navigator.of(context).pushNamed('/notifications'),
+                    ),
+                    if (uncategorizedCount > 0)
+                      Positioned(
+                        top: 10,
+                        right: 10,
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF2DD4BF),
+                            shape: BoxShape.circle,
                           ),
-                          textAlign: TextAlign.center,
                         ),
                       ),
-                    ),
-                ],
-              );
-            },
-          ),
+                  ],
+                );
+              },
+            ),
+          ],
           const SizedBox(width: 8),
         ],
       ),
       body: Consumer<DashboardProvider>(
         builder: (context, dashboard, _) {
+          final txns = dashboard.currentMonthTransactions;
+
           return Stack(
             children: [
               RefreshIndicator(
@@ -206,25 +229,27 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     const SizedBox(height: 8),
                     // Greeting
-                    Text(
-                      _greeting(),
-                      style: GoogleFonts.inter(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w400,
-                        color: isDark
-                            ? Colors.white.withValues(alpha: 0.6)
-                            : Colors.black.withValues(alpha: 0.5),
+                    if (!isSelectionMode)
+                      Text(
+                        _greeting(),
+                        style: GoogleFonts.inter(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w400,
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.6)
+                              : Colors.black.withValues(alpha: 0.5),
+                        ),
                       ),
-                    ),
                     const SizedBox(height: 20),
 
                     // Card 1: Monthly Budget Card
-                    MonthlyBudgetCard(
-                      provider: dashboard,
-                      currencyFormat: _currencyFormat,
-                      isDark: isDark,
-                    ),
-                    const SizedBox(height: 24),
+                    if (!isSelectionMode)
+                      MonthlyBudgetCard(
+                        provider: dashboard,
+                        currencyFormat: _currencyFormat,
+                        isDark: isDark,
+                      ),
+                    if (!isSelectionMode) const SizedBox(height: 24),
 
                     // Recent Transactions Header
                     Row(
@@ -237,33 +262,50 @@ class _HomeScreenState extends State<HomeScreen> {
                             fontWeight: FontWeight.w700,
                           ),
                         ),
-                        TextButton(
-                          onPressed: () =>
-                              Navigator.of(context).pushNamed('/transactions'),
-                          child: Text(
-                            'See All',
-                            style: GoogleFonts.inter(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: isDark
-                                  ? const Color(0xFF2DD4BF)
-                                  : const Color(0xFF0D9488),
+                        if (isSelectionMode)
+                          TextButton(
+                            onPressed: () => _selectAll(txns),
+                            child: Text(
+                              'Select All',
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? const Color(0xFF2DD4BF) : const Color(0xFF0D9488),
+                              ),
+                            ),
+                          )
+                        else
+                          TextButton(
+                            onPressed: () =>
+                                Navigator.of(context).pushNamed('/transactions'),
+                            child: Text(
+                              'See All',
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: isDark
+                                    ? const Color(0xFF2DD4BF)
+                                    : const Color(0xFF0D9488),
+                              ),
                             ),
                           ),
-                        ),
                       ],
                     ),
                     const SizedBox(height: 8),
 
                     // Transaction List
-                    ...dashboard.currentMonthTransactions.map(
+                    ...txns.map(
                       (txn) => TransactionTile(
                         transaction: txn,
                         currencyFormat: _currencyFormat,
+                        isSelectionMode: isSelectionMode,
+                        isSelected: _selectedTxnIds.contains(txn.id),
+                        onToggleSelect: () => _toggleSelect(txn.id),
+                        onLongPress: () => _toggleSelect(txn.id),
                         onCategorize: () => _showCategorizeSheet(context, txn),
                       ),
                     ),
-                    const SizedBox(height: 80),
+                    const SizedBox(height: 90),
                   ],
                 ),
               ),
@@ -278,19 +320,67 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddTransactionModal(context),
-        backgroundColor: const Color(0xFF6366F1),
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: Text(
-          'Add Transaction',
-          style: GoogleFonts.inter(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-          ),
-        ),
-      ),
+      floatingActionButton: isSelectionMode
+          ? Container(
+              margin: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E1E1E) : const Color(0xFF0F172A),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '${_selectedTxnIds.length} items selected',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () => _openBatchCategorize(context),
+                    icon: const Icon(Icons.category_outlined, size: 18),
+                    label: Text(
+                      'Categorize',
+                      style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0D9488),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : FloatingActionButton.extended(
+              onPressed: () => _showAddTransactionModal(context),
+              backgroundColor: const Color(0xFF6366F1),
+              icon: const Icon(Icons.add, color: Colors.white),
+              label: Text(
+                'Add Transaction',
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+      floatingActionButtonLocation: isSelectionMode
+          ? FloatingActionButtonLocation.centerFloat
+          : FloatingActionButtonLocation.endFloat,
     );
   }
 

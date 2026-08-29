@@ -38,6 +38,10 @@ dependencies:
   flutter_local_notifications: ^17.2.1
   shared_preferences: ^2.3.2
 
+  # ── PDF Generation & Export ────────────────────────
+  pdf: ^3.11.1
+  printing: ^5.13.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

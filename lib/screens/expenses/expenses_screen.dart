@@ -1,9 +1,9 @@
 /// Expenses Screen displaying Donut Chart and Category breakdown table.
 ///
 /// Categorizes individual categories into 3 Macro Groups:
-/// 1. Investments (Education)
-/// 2. Fixed/Health (Bills, Health, Groceries, Fuel, Transport)
-/// 3. Variables (Food, Shopping, Entertainment, Travel, Uncategorized)
+/// 1. Investments (SIP, Stocks)
+/// 2. Fixed/Health (Rent, Whey Protein, Daily Protein, Eggs, Gym Fees, Groceries, Transport, Medicine)
+/// 3. Variables (Beverages, Outside Food, Subscriptions, Shopping, Uncategorized)
 library;
 
 import 'package:flutter/material.dart';
@@ -11,17 +11,18 @@ import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:personal_finance_assistant/providers/dashboard_provider.dart';
+import 'package:personal_finance_assistant/constants/categories.dart';
+import 'package:personal_finance_assistant/services/pdf_report_service.dart';
 
-class ExpensesScreen extends StatelessWidget {
+class ExpensesScreen extends StatefulWidget {
   const ExpensesScreen({super.key});
 
-  String _capitalize(String name) {
-    if (name.isEmpty) return name;
-    return name.split(' ').map((word) {
-      if (word.isEmpty) return '';
-      return word[0].toUpperCase() + word.substring(1).toLowerCase();
-    }).join(' ');
-  }
+  @override
+  State<ExpensesScreen> createState() => _ExpensesScreenState();
+}
+
+class _ExpensesScreenState extends State<ExpensesScreen> {
+  bool _isExporting = false;
 
   Color _getMacroColorForCategory(String category) {
     switch (category.toLowerCase().trim()) {
@@ -37,9 +38,37 @@ class ExpensesScreen extends StatelessWidget {
       case 'transportion':
       case 'transportation':
       case 'transport':
+      case 'medicine':
         return const Color(0xFF6366F1); // Fixed/Health - Indigo
       default:
         return const Color(0xFFF59E0B); // Variables - Amber
+    }
+  }
+
+  Future<void> _exportPdfReport() async {
+    if (_isExporting) return;
+    setState(() => _isExporting = true);
+
+    try {
+      final dashboard = context.read<DashboardProvider>();
+      await PdfReportService.exportAndShareReport(
+        month: DateTime.now(),
+        monthlyBudget: dashboard.monthlyBudget,
+        transactions: dashboard.recentTransactions,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to generate PDF report: $e'),
+            backgroundColor: const Color(0xFFEF4444),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isExporting = false);
+      }
     }
   }
 
@@ -59,28 +88,29 @@ class ExpensesScreen extends StatelessWidget {
           icon: const Icon(Icons.arrow_back_ios_new, size: 20),
           onPressed: () => Navigator.of(context).pop(),
         ),
+        actions: [
+          IconButton(
+            icon: _isExporting
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  )
+                : const Icon(Icons.picture_as_pdf_outlined),
+            tooltip: 'Export Monthly PDF Report',
+            onPressed: _isExporting ? null : _exportPdfReport,
+          ),
+        ],
       ),
       body: Consumer<DashboardProvider>(
         builder: (context, dashboard, _) {
           final transactions = dashboard.recentTransactions;
 
-          // 1. Initialize category totals (11 individual categories explicitly)
-          final categoryTotals = <String, double>{
-            'rent': 0.0,
-            'whey protein': 0.0,
-            'daily protein': 0.0,
-            'eggs': 0.0,
-            'sip': 0.0,
-            'stocks': 0.0,
-            'gym fees': 0.0,
-            'beverages': 0.0,
-            'outside food': 0.0,
-            'subscriptions': 0.0,
-            'groceries': 0.0,
-            'transportion': 0.0,
-            'medicine': 0.0,
-            'uncategorized': 0.0,
-          };
+          // 1. Initialize category totals dynamically from kExpenseCategories
+          final categoryTotals = <String, double>{};
+          for (final cat in kExpenseCategories) {
+            categoryTotals[cat.id] = 0.0;
+          }
 
           double totalOutflow = 0.0;
           for (final txn in transactions) {
@@ -94,27 +124,28 @@ class ExpensesScreen extends StatelessWidget {
               totalOutflow += signedAmount;
             } else {
               categoryTotals['uncategorized'] =
-                  categoryTotals['uncategorized']! + signedAmount;
+                  (categoryTotals['uncategorized'] ?? 0.0) + signedAmount;
               totalOutflow += signedAmount;
             }
           }
 
           // 2. Aggregate into the 3 defined Macro Groups
-          final double investmentsTotal = categoryTotals['sip']! + categoryTotals['stocks']!;
+          final double investmentsTotal = (categoryTotals['sip'] ?? 0.0) + (categoryTotals['stocks'] ?? 0.0);
 
-          final double fixedHealthTotal = categoryTotals['rent']! +
-              categoryTotals['whey protein']! +
-              categoryTotals['daily protein']! +
-              categoryTotals['eggs']! +
-              categoryTotals['gym fees']! +
-              categoryTotals['groceries']! +
-              categoryTotals['transportion']! +
-              categoryTotals['medicine']!;
+          final double fixedHealthTotal = (categoryTotals['rent'] ?? 0.0) +
+              (categoryTotals['whey protein'] ?? 0.0) +
+              (categoryTotals['daily protein'] ?? 0.0) +
+              (categoryTotals['eggs'] ?? 0.0) +
+              (categoryTotals['gym fees'] ?? 0.0) +
+              (categoryTotals['groceries'] ?? 0.0) +
+              (categoryTotals['transportion'] ?? 0.0) +
+              (categoryTotals['medicine'] ?? 0.0);
 
-          final double variablesTotal = categoryTotals['beverages']! +
-              categoryTotals['outside food']! +
-              categoryTotals['subscriptions']! +
-              categoryTotals['uncategorized']!;
+          final double variablesTotal = (categoryTotals['beverages'] ?? 0.0) +
+              (categoryTotals['outside food'] ?? 0.0) +
+              (categoryTotals['subscriptions'] ?? 0.0) +
+              (categoryTotals['shopping'] ?? 0.0) +
+              (categoryTotals['uncategorized'] ?? 0.0);
 
           return Stack(
             children: [
@@ -126,6 +157,93 @@ class ExpensesScreen extends StatelessWidget {
                     parent: BouncingScrollPhysics(),
                   ),
                   children: [
+                    // Export PDF Report Banner Card
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 20),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: isDark
+                              ? [const Color(0xFF0F766E), const Color(0xFF134E4A)]
+                              : [const Color(0xFF0D9488), const Color(0xFF14B8A6)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF0D9488).withValues(alpha: 0.25),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(
+                              Icons.picture_as_pdf_rounded,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Monthly PDF Report',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Export & share itemized ledger summary',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    color: Colors.white.withValues(alpha: 0.85),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          ElevatedButton(
+                            onPressed: _isExporting ? null : _exportPdfReport,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: const Color(0xFF0F766E),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            child: _isExporting
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : Text(
+                                    'Export',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                          ),
+                        ],
+                      ),
+                    ),
+
                     // Macro Donut Chart Card
                     Card(
                       margin: const EdgeInsets.only(bottom: 24),
@@ -285,6 +403,7 @@ class ExpensesScreen extends StatelessWidget {
                             final catName = entry.key;
                             final catAmount = entry.value;
                             final macroColor = _getMacroColorForCategory(catName);
+                            final categoryTitle = getCategoryLabel(catName);
 
                             return Column(
                               children: [
@@ -306,7 +425,7 @@ class ExpensesScreen extends StatelessWidget {
                                           ),
                                           const SizedBox(width: 10),
                                           Text(
-                                            _capitalize(catName),
+                                            categoryTitle,
                                             style: GoogleFonts.inter(
                                               fontSize: 14,
                                               fontWeight: FontWeight.w600,

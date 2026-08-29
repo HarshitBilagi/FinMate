@@ -42,7 +42,7 @@ class Transaction {
       transactionType: json['transaction_type'] as String? ?? 'debit',
       isRefund: json['is_refund'] as bool? ?? false,
       source: json['source'] as String? ?? 'email',
-      transactedAt: DateTime.parse(json['transacted_at'] as String),
+      transactedAt: DateTime.parse(json['transacted_at'] as String).toLocal(),
       isProcessing: false,
     );
   }

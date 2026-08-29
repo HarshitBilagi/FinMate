@@ -1,24 +1,28 @@
 /// Reusable transaction list tile widget.
 ///
 /// Shows merchant, amount (color-coded for debit/refund),
-/// timestamp, category icon, and an inline "Categorize" chip
-/// for uncategorized transactions.
+/// timestamp, category icon, inline "Categorize" chip,
+/// swipe-to-delete support, and multi-selection mode.
 library;
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import 'package:personal_finance_assistant/core/theme/app_theme.dart';
 import 'package:personal_finance_assistant/models/transaction.dart';
-
-import 'package:provider/provider.dart';
 import 'package:personal_finance_assistant/providers/dashboard_provider.dart';
+import 'package:personal_finance_assistant/constants/categories.dart';
 
 class TransactionTile extends StatelessWidget {
   final Transaction transaction;
   final NumberFormat currencyFormat;
   final VoidCallback onCategorize;
   final VoidCallback? onDelete;
+  final bool isSelectionMode;
+  final bool isSelected;
+  final VoidCallback? onToggleSelect;
+  final VoidCallback? onLongPress;
 
   const TransactionTile({
     super.key,
@@ -26,6 +30,10 @@ class TransactionTile extends StatelessWidget {
     required this.currencyFormat,
     required this.onCategorize,
     this.onDelete,
+    this.isSelectionMode = false,
+    this.isSelected = false,
+    this.onToggleSelect,
+    this.onLongPress,
   });
 
   @override
@@ -34,6 +42,174 @@ class TransactionTile extends StatelessWidget {
     final isCredit = transaction.isRefund || transaction.transactionType == 'credit';
     final amountColor = isCredit ? AppTheme.income : AppTheme.expense;
     final amountPrefix = isCredit ? '+' : '-';
+    final catColor = getCategoryColor(transaction.category);
+    final catIcon = getCategoryIcon(transaction.category);
+
+    final tileContent = Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: isSelected
+            ? (isDark
+                ? const Color(0xFF0D9488).withValues(alpha: 0.18)
+                : const Color(0xFFCCFBF1).withValues(alpha: 0.7))
+            : (isDark ? AppTheme.cardDark1 : AppTheme.cardLight1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isSelected
+              ? (isDark ? const Color(0xFF2DD4BF) : const Color(0xFF0D9488))
+              : (isDark
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : Colors.black.withValues(alpha: 0.06)),
+          width: isSelected ? 1.5 : 1.0,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            if (isSelectionMode && onToggleSelect != null) {
+              onToggleSelect!();
+            } else if (transaction.category == 'uncategorized') {
+              onCategorize();
+            }
+          },
+          onLongPress: onLongPress ?? onToggleSelect,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Row(
+              children: [
+                // Selection checkbox or category icon
+                if (isSelectionMode) ...[
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 28,
+                    height: 28,
+                    margin: const EdgeInsets.only(right: 12),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? (isDark ? const Color(0xFF2DD4BF) : const Color(0xFF0D9488))
+                          : Colors.transparent,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isSelected
+                            ? (isDark ? const Color(0xFF2DD4BF) : const Color(0xFF0D9488))
+                            : (isDark ? Colors.white38 : Colors.black38),
+                        width: 2,
+                      ),
+                    ),
+                    child: isSelected
+                        ? Icon(
+                            Icons.check,
+                            size: 18,
+                            color: isDark ? Colors.black : Colors.white,
+                          )
+                        : null,
+                  ),
+                ],
+
+                // Leading Category Icon
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: catColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: transaction.isProcessing
+                      ? Center(
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.0,
+                              color: catColor,
+                            ),
+                          ),
+                        )
+                      : Icon(
+                          catIcon,
+                          color: catColor,
+                          size: 22,
+                        ),
+                ),
+                const SizedBox(width: 12),
+
+                // Title & Subtitle
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        transaction.merchant ?? 'Unknown',
+                        style: GoogleFonts.inter(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Text(
+                            DateFormat('dd MMM, hh:mm a').format(transaction.transactedAt),
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.45)
+                                  : Colors.black.withValues(alpha: 0.45),
+                            ),
+                          ),
+                          if (transaction.category == 'uncategorized' && !isSelectionMode) ...[
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: onCategorize,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.warning.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  'Categorize',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppTheme.warning,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+
+                // Trailing Amount
+                Text(
+                  '$amountPrefix${currencyFormat.format(transaction.amount)}',
+                  style: GoogleFonts.inter(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: amountColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // When selection mode is active, disable swipe-to-dismiss to prevent accidental deletion
+    if (isSelectionMode) {
+      return tileContent;
+    }
 
     return Dismissible(
       key: Key(transaction.id),
@@ -105,135 +281,7 @@ class TransactionTile extends StatelessWidget {
         ),
         child: const Icon(Icons.delete_outline, color: Colors.white, size: 26),
       ),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        decoration: BoxDecoration(
-          color: isDark ? AppTheme.cardDark1 : AppTheme.cardLight1,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.06)
-                : Colors.black.withValues(alpha: 0.06),
-          ),
-        ),
-        child: ListTile(
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          leading: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: _categoryColor(transaction.category)
-                  .withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: transaction.isProcessing
-                ? Center(
-                    child: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.0,
-                        color: _categoryColor(transaction.category),
-                      ),
-                    ),
-                  )
-                : Icon(
-                    _categoryIcon(transaction.category),
-                    color: _categoryColor(transaction.category),
-                    size: 22,
-                  ),
-          ),
-          title: Text(
-            transaction.merchant ?? 'Unknown',
-            style: GoogleFonts.inter(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          subtitle: Row(
-            children: [
-              Text(
-                DateFormat('dd MMM, hh:mm a').format(transaction.transactedAt),
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.45)
-                      : Colors.black.withValues(alpha: 0.45),
-                ),
-              ),
-              if (transaction.category == 'uncategorized') ...[
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: onCategorize,
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: AppTheme.warning.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      'Categorize',
-                      style: GoogleFonts.inter(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.warning,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-          trailing: Text(
-            '$amountPrefix${currencyFormat.format(transaction.amount)}',
-            style: GoogleFonts.inter(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: amountColor,
-            ),
-          ),
-        ),
-      ),
+      child: tileContent,
     );
-  }
-
-  IconData _categoryIcon(String category) {
-    return switch (category.toLowerCase().trim()) {
-      'rent' => Icons.home_outlined,
-      'whey protein' => Icons.fitness_center_outlined,
-      'daily protein' => Icons.restaurant_menu_outlined,
-      'eggs' => Icons.egg_outlined,
-      'sip' => Icons.trending_up_outlined,
-      'stocks' => Icons.show_chart_outlined,
-      'gym fees' => Icons.sports_gymnastics_outlined,
-      'beverages' => Icons.local_cafe_outlined,
-      'outside food' => Icons.restaurant_outlined,
-      'subscriptions' => Icons.subscriptions_outlined,
-      'groceries' => Icons.local_grocery_store_outlined,
-      'transportion' || 'transportation' || 'transport' => Icons.directions_car_outlined,
-      _ => Icons.help_outline,
-    };
-  }
-
-  Color _categoryColor(String category) {
-    return switch (category.toLowerCase().trim()) {
-      'rent' => const Color(0xFFEF4444),
-      'whey protein' => const Color(0xFF6366F1),
-      'daily protein' => const Color(0xFFA855F7),
-      'eggs' => const Color(0xFFF59E0B),
-      'sip' => const Color(0xFF10B981),
-      'stocks' => const Color(0xFF22C55E),
-      'gym fees' => const Color(0xFF0EA5E9),
-      'beverages' => const Color(0xFFEC4899),
-      'outside food' => const Color(0xFFF97316),
-      'subscriptions' => const Color(0xFF78716C),
-      'groceries' => const Color(0xFF84CC16),
-      'transportion' || 'transportation' || 'transport' => const Color(0xFF3B82F6),
-      _ => const Color(0xFF94A3B8),
-    };
   }
 }

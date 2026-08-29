@@ -11,6 +11,8 @@ import 'package:intl/intl.dart';
 import 'package:personal_finance_assistant/providers/dashboard_provider.dart';
 import 'package:personal_finance_assistant/models/transaction.dart';
 
+import 'package:personal_finance_assistant/constants/categories.dart';
+
 class CategorizeSheet extends StatefulWidget {
   final Transaction transaction;
 
@@ -23,36 +25,22 @@ class CategorizeSheet extends StatefulWidget {
 class _CategorizeSheetState extends State<CategorizeSheet> {
   bool _isSaving = false;
 
-  static const _categories = [
-    _CategoryOption('rent', Icons.home_outlined, Color(0xFFEF4444)),
-    _CategoryOption('whey protein', Icons.fitness_center_outlined, Color(0xFF6366F1)),
-    _CategoryOption('daily protein', Icons.restaurant_menu_outlined, Color(0xFFA855F7)),
-    _CategoryOption('eggs', Icons.egg_outlined, Color(0xFFF59E0B)),
-    _CategoryOption('sip', Icons.trending_up_outlined, Color(0xFF10B981)),
-    _CategoryOption('stocks', Icons.show_chart_outlined, Color(0xFF22C55E)),
-    _CategoryOption('gym fees', Icons.sports_gymnastics_outlined, Color(0xFF0EA5E9)),
-    _CategoryOption('beverages', Icons.local_cafe_outlined, Color(0xFFEC4899)),
-    _CategoryOption('outside food', Icons.restaurant_outlined, Color(0xFFF97316)),
-    _CategoryOption('subscriptions', Icons.subscriptions_outlined, Color(0xFF78716C)),
-    _CategoryOption('groceries', Icons.local_grocery_store_outlined, Color(0xFF84CC16)),
-    _CategoryOption('transportion', Icons.directions_car_outlined, Color(0xFF3B82F6)),
-    _CategoryOption('medicine', Icons.medical_services_outlined, Color(0xFF14B8A6)),
-  ];
+  final _categories = kExpenseCategories.where((c) => c.id != 'uncategorized').toList();
 
-  Future<void> _onCategoryTap(String categoryName) async {
+  Future<void> _onCategoryTap(String categoryId, String categoryLabel) async {
     if (_isSaving) return;
     setState(() => _isSaving = true);
 
     // Capture provider BEFORE async gap
     final provider = context.read<DashboardProvider>();
-    final success = await provider.categorizeTransaction(widget.transaction.id, categoryName);
+    final success = await provider.categorizeTransaction(widget.transaction.id, categoryId);
 
     if (!mounted) return;
     setState(() => _isSaving = false);
 
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Added to ${categoryName.split(' ').map((word) => word.toLowerCase() == 'sip' ? 'SIP' : (word[0].toUpperCase() + word.substring(1).toLowerCase())).join(' ')}')),
+        SnackBar(content: Text('Added to $categoryLabel')),
       );
       Navigator.of(context).pop();
     } else {
@@ -245,10 +233,10 @@ class _CategorizeSheetState extends State<CategorizeSheet> {
               itemCount: _categories.length,
               itemBuilder: (context, index) {
                 final cat = _categories[index];
-                final isSelected = widget.transaction.category == cat.name;
+                final isSelected = widget.transaction.category == cat.id;
 
                 return GestureDetector(
-                  onTap: () => _onCategoryTap(cat.name),
+                  onTap: () => _onCategoryTap(cat.id, cat.label),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     decoration: BoxDecoration(
@@ -266,7 +254,7 @@ class _CategorizeSheetState extends State<CategorizeSheet> {
                         Icon(cat.icon, color: cat.color, size: 20),
                         const SizedBox(height: 6),
                         Text(
-                          cat.name.split(' ').map((word) => word.toLowerCase() == 'sip' ? 'SIP' : (word[0].toUpperCase() + word.substring(1).toLowerCase())).join(' '),
+                          cat.label,
                           style: GoogleFonts.inter(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
@@ -322,12 +310,4 @@ class _DetailRow extends StatelessWidget {
       ],
     );
   }
-}
-
-class _CategoryOption {
-  final String name;
-  final IconData icon;
-  final Color color;
-
-  const _CategoryOption(this.name, this.icon, this.color);
 }

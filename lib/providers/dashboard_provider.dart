@@ -256,6 +256,76 @@ class DashboardProvider extends ChangeNotifier {
     }
   }
 
+  /// Categorizes multiple transactions at once, updating state optimistically and syncing with backend.
+  Future<bool> batchCategorizeTransactions(List<String> transactionIds, String category) async {
+    if (transactionIds.isEmpty) return false;
+
+    // 1. Optimistic UI update: change category for all selected transactions
+    for (int i = 0; i < _recentTransactions.length; i++) {
+      if (transactionIds.contains(_recentTransactions[i].id)) {
+        _recentTransactions[i] = _recentTransactions[i].copyWith(
+          category: category,
+          isProcessing: true,
+        );
+      }
+    }
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final realIds = <String>[];
+      for (final id in transactionIds) {
+        if (id.startsWith('txn-')) {
+          final txn = _recentTransactions.firstWhere((t) => t.id == id);
+          final createRes = await _apiClient.createTransaction(
+            upiRefId: txn.upiRefId,
+            amount: txn.amount,
+            merchant: txn.merchant ?? 'Unknown',
+            cardMasked: txn.cardId,
+            rawMessage: 'App intercepted transaction categorized manually',
+            transactionDate: txn.transactedAt,
+            category: category,
+          );
+          final realId = createRes['id'] as String;
+          realIds.add(realId);
+
+          final idx = _recentTransactions.indexWhere((t) => t.id == id);
+          if (idx != -1) {
+            _recentTransactions[idx] = _recentTransactions[idx].copyWith(id: realId);
+          }
+        } else {
+          realIds.add(id);
+        }
+      }
+
+      if (realIds.isNotEmpty) {
+        await _apiClient.batchCategorize(
+          transactionIds: realIds,
+          category: category,
+        );
+      }
+
+      for (int i = 0; i < _recentTransactions.length; i++) {
+        if (realIds.contains(_recentTransactions[i].id)) {
+          _recentTransactions[i] = _recentTransactions[i].copyWith(
+            isProcessing: false,
+          );
+        }
+      }
+      notifyListeners();
+
+      await Future.delayed(const Duration(milliseconds: 600));
+      await _silentRefresh();
+      return true;
+    } catch (e) {
+      debugPrint('[BATCH CATEGORIZE] Failed: $e');
+      await _silentRefresh();
+      return false;
+    } finally {
+      notifyListeners();
+    }
+  }
+
   /// Returns true on success, false on failure. Callers can use this
   /// to decide whether to pop the modal or show an error.
   Future<bool> categorizeTransaction(String transactionId, String category) async {

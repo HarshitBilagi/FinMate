@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:personal_finance_assistant/providers/dashboard_provider.dart';
 
+import 'package:personal_finance_assistant/constants/categories.dart';
+
 class AddTransactionModal extends StatefulWidget {
   const AddTransactionModal({super.key});
 
@@ -23,22 +25,9 @@ class _AddTransactionModalState extends State<AddTransactionModal> {
   String _selectedTransactionType = 'debit';
   bool _isSubmitting = false;
 
-  final List<Map<String, String>> _categories = const [
-    {'id': 'rent', 'label': 'Rent'},
-    {'id': 'whey protein', 'label': 'Whey Protein'},
-    {'id': 'daily protein', 'label': 'Daily Protein'},
-    {'id': 'eggs', 'label': 'Eggs'},
-    {'id': 'sip', 'label': 'SIP'},
-    {'id': 'stocks', 'label': 'Stocks'},
-    {'id': 'gym fees', 'label': 'Gym Fees'},
-    {'id': 'beverages', 'label': 'Beverages'},
-    {'id': 'outside food', 'label': 'Outside Food'},
-    {'id': 'subscriptions', 'label': 'Subscriptions'},
-    {'id': 'groceries', 'label': 'Groceries'},
-    {'id': 'transportion', 'label': 'Transportation'},
-    {'id': 'medicine', 'label': 'Medicine'},
-    {'id': 'uncategorized', 'label': 'Uncategorized'},
-  ];
+  final List<Map<String, String>> _categories = kExpenseCategories
+      .map((c) => {'id': c.id, 'label': c.label})
+      .toList();
 
   final List<String> _paymentModes = const ['UPI', 'Card', 'Cash', 'Net Banking'];
 

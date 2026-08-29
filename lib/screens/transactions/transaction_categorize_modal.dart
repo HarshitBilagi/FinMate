@@ -8,6 +8,8 @@ import 'package:intl/intl.dart';
 import 'package:personal_finance_assistant/providers/dashboard_provider.dart';
 import 'package:personal_finance_assistant/services/notification_service.dart';
 
+import 'package:personal_finance_assistant/constants/categories.dart';
+
 class TransactionCategorizeModal extends StatefulWidget {
   final TransactionNotification notification;
   final VoidCallback? onDismiss;
@@ -28,22 +30,7 @@ class _TransactionCategorizeModalState
   String? _selectedCategory;
   bool _isSaving = false;
 
-  static const _categories = [
-    _CategoryOption('rent', Icons.home_outlined, Color(0xFFEF4444)),
-    _CategoryOption('whey protein', Icons.fitness_center_outlined, Color(0xFF6366F1)),
-    _CategoryOption('daily protein', Icons.restaurant_menu_outlined, Color(0xFFA855F7)),
-    _CategoryOption('eggs', Icons.egg_outlined, Color(0xFFF59E0B)),
-    _CategoryOption('sip', Icons.trending_up_outlined, Color(0xFF10B981)),
-    _CategoryOption('stocks', Icons.show_chart_outlined, Color(0xFF22C55E)),
-    _CategoryOption('gym fees', Icons.sports_gymnastics_outlined, Color(0xFF0EA5E9)),
-    _CategoryOption('beverages', Icons.local_cafe_outlined, Color(0xFFEC4899)),
-    _CategoryOption('outside food', Icons.restaurant_outlined, Color(0xFFF97316)),
-    _CategoryOption('subscriptions', Icons.subscriptions_outlined, Color(0xFF78716C)),
-    _CategoryOption('groceries', Icons.local_grocery_store_outlined, Color(0xFF84CC16)),
-    _CategoryOption('transportion', Icons.directions_car_outlined, Color(0xFF3B82F6)),
-    _CategoryOption('medicine', Icons.medical_services_outlined, Color(0xFF14B8A6)),
-    _CategoryOption('uncategorized', Icons.help_outline_outlined, Color(0xFF94A3B8)),
-  ];
+  final _categories = kExpenseCategories;
 
   @override
   void initState() {
@@ -228,25 +215,24 @@ class _TransactionCategorizeModalState
               itemCount: _categories.length,
               itemBuilder: (context, index) {
                 final cat = _categories[index];
-                final isSelected = _selectedCategory == cat.name;
+                final isSelected = _selectedCategory == cat.id;
 
                 return GestureDetector(
                   onTap: () {
                     setState(() {
-                      _selectedCategory = cat.name;
+                      _selectedCategory = cat.id;
                     });
                   },
                   child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 150),
+                    duration: const Duration(milliseconds: 200),
                     decoration: BoxDecoration(
                       color: isSelected
                           ? cat.color.withValues(alpha: 0.2)
-                          : cat.color.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isSelected ? cat.color : Colors.transparent,
-                        width: 2,
-                      ),
+                          : cat.color.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(14),
+                      border: isSelected
+                          ? Border.all(color: cat.color, width: 2)
+                          : null,
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -255,7 +241,7 @@ class _TransactionCategorizeModalState
                         const SizedBox(width: 6),
                         Flexible(
                           child: Text(
-                            cat.name.split(' ').map((word) => word.toLowerCase() == 'sip' ? 'SIP' : (word[0].toUpperCase() + word.substring(1).toLowerCase())).join(' '),
+                            cat.label,
                             style: GoogleFonts.inter(
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
@@ -384,12 +370,4 @@ class _MetaRow extends StatelessWidget {
       ],
     );
   }
-}
-
-class _CategoryOption {
-  final String name;
-  final IconData icon;
-  final Color color;
-
-  const _CategoryOption(this.name, this.icon, this.color);
 }

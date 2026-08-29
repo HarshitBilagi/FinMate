@@ -328,7 +328,9 @@ class SmsReceiverService {
       // 2-digit year pivot: 00–49 → 2000–2049, 50–99 → 1950–1999
       final year = yearShort < 50 ? 2000 + yearShort : 1900 + yearShort;
 
-      return DateTime(year, month, day);
+      // Preserve current receipt time (hour/minute/second) so timestamps are exact rather than 12:00 AM
+      final now = DateTime.now();
+      return DateTime(year, month, day, now.hour, now.minute, now.second);
     } catch (e) {
       debugPrint('[SMS Parser] Date parse error for "$raw": $e');
       return null;
