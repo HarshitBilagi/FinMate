@@ -121,7 +121,7 @@ class FinanceApiClient {
       'transaction_type': transactionType,
     };
     if (transactionDate != null) {
-      payload['transaction_date'] = transactionDate.toIso8601String();
+      payload['transaction_date'] = transactionDate.toUtc().toIso8601String();
     }
 
     // Structural elements validation check

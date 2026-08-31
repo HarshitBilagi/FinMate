@@ -1,15 +1,17 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 import logging
 
 from app.services.email_parser import fetch_icici_emails
 from app.core.config import get_settings
+from app.core.automated_reporter import run_end_of_month_reporting_job
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Scheduler for background IMAP tasks
+# Scheduler for background tasks
 scheduler = AsyncIOScheduler()
 
 
@@ -38,14 +40,27 @@ def check_emails():
 async def lifespan(app: FastAPI):
     # Startup: Start the scheduler
     settings = get_settings()
+    
+    # 1. IMAP Email polling
     scheduler.add_job(
         check_emails,
         "interval",
         minutes=settings.EMAIL_CHECK_INTERVAL_MINUTES,
+        id="email_check_interval",
+        replace_existing=True,
     )
+
+    # 2. Automated End-of-Month PDF Report Generation at 22:00 on the last day of each month
+    scheduler.add_job(
+        run_end_of_month_reporting_job,
+        CronTrigger(day="last", hour=22, minute=0, timezone="Asia/Kolkata"),
+        id="eom_report_automation",
+        replace_existing=True,
+    )
+
     scheduler.start()
     logger.info(
-        f"APScheduler started (interval: {settings.EMAIL_CHECK_INTERVAL_MINUTES}m)"
+        f"APScheduler started (Email interval: {settings.EMAIL_CHECK_INTERVAL_MINUTES}m, EOM Cron: 22:00 on last day of month)"
     )
     yield
     # Shutdown: Stop the scheduler

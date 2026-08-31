@@ -10,11 +10,15 @@ from functools import lru_cache
 class Settings(BaseSettings):
     """Application settings loaded from environment variables or .env file."""
 
-    # ── IMAP (Gmail) ──────────────────────────────────────────────────────
+    # ── IMAP & SMTP (Gmail) ────────────────────────────────────────────────
     IMAP_HOST: str = "imap.gmail.com"
     IMAP_PORT: int = 993
     IMAP_EMAIL: str = "harshabilagihb@gmail.com"        # Gmail address
     IMAP_PASSWORD: str = ""     # Gmail App Password (NOT account password)
+
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    DEFAULT_TIMEZONE: str = "Asia/Kolkata"
 
     # ── Supabase & JWT Auth ───────────────────────────────────────────────
     SUPABASE_URL: str = "https://ydjcljiouvlwplcmdovt.supabase.co"

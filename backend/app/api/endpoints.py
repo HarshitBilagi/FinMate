@@ -1,12 +1,18 @@
 from fastapi import APIRouter, HTTPException, Header, Depends, status
+from fastapi.responses import Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
-from typing import Optional
-from datetime import date, datetime, timedelta
+from typing import Optional, List
+from datetime import date, datetime, timedelta, timezone
 import logging
 
 from app.core.config import get_settings
 from app.db.supabase import get_supabase_client
+from app.core.automated_reporter import (
+    generate_monthly_user_report,
+    send_monthly_report_email,
+    send_fcm_notification
+)
 from app.schemas.api_schemas import (
     DashboardSummaryResponse,
     CategorizeTransactionRequest,
@@ -19,6 +25,52 @@ from app.schemas.api_schemas import (
     TransactionListItem,
     TransactionsListResponse
 )
+
+IST = timezone(timedelta(hours=5, minutes=30))
+
+def normalize_timestamp(date_str: Optional[str]) -> str:
+    """
+    Parses and normalizes incoming timestamp strings to ensure they are
+    timezone-aware and accurately stored in Supabase TIMESTAMPTZ.
+    If naive, explicitly assigns IST (+05:30) offset.
+    """
+    now_ist = datetime.now(IST)
+    if not date_str or not date_str.strip():
+        return now_ist.isoformat()
+    
+    cleaned = date_str.strip()
+    if "T" not in cleaned and " " not in cleaned:
+        cleaned = f"{cleaned}T{now_ist.strftime('%H:%M:%S.%f')[:-3]}"
+    else:
+        cleaned = cleaned.replace(" ", "T")
+    
+    try:
+        if cleaned.endswith("Z"):
+            cleaned = cleaned[:-1] + "+00:00"
+        dt = datetime.fromisoformat(cleaned)
+    except Exception:
+        return now_ist.isoformat()
+    
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=IST)
+        
+    return dt.isoformat()
+
+class TriggerReportRequest(BaseModel):
+    user_id: Optional[str] = None
+    month: Optional[int] = None
+    year: Optional[int] = None
+    email: Optional[str] = None
+
+class TriggerReportResponse(BaseModel):
+    user_id: str
+    month: int
+    year: int
+    email: str
+    email_sent: bool
+    fcm_sent: bool
+    filename: str
+    message: str
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -325,15 +377,8 @@ def create_transaction(
         card_id = card['id']
         current_limit = float(card['available_limit'])
         
-        # Use client-parsed SMS date when provided, else fallback to server time
-        now = datetime.now()
-        if request.transaction_date:
-            transacted_at = request.transaction_date
-            # Ensure full ISO timestamp if only date was provided (e.g. "2026-08-29")
-            if "T" not in transacted_at and " " not in transacted_at:
-                transacted_at = f"{transacted_at}T{now.strftime('%H:%M:%S')}.000Z"
-        else:
-            transacted_at = now.isoformat()
+        # Robust timezone-aware timestamp normalization
+        transacted_at = normalize_timestamp(request.transaction_date)
 
         txn_category = request.category if request.category else "uncategorized"
         txn_type = request.transaction_type if request.transaction_type else "debit"
@@ -480,3 +525,98 @@ def delete_transaction(
     except Exception as e:
         logger.error(f"Error deleting transaction {transaction_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
+
+@router.post("/reports/trigger-monthly-report", response_model=TriggerReportResponse)
+def trigger_monthly_report(
+    request: Optional[TriggerReportRequest] = None,
+    device_id: str = Depends(get_device_id),
+    token: dict = Depends(verify_token)
+):
+    """
+    Manually triggers generation and email delivery of the monthly PDF report.
+    """
+    supabase = get_supabase_client()
+    settings = get_settings()
+    now = datetime.now(IST)
+
+    target_month = (request.month if request and request.month else None) or now.month
+    target_year = (request.year if request and request.year else None) or now.year
+    recipient_email = (request.email if request and request.email else None) or settings.IMAP_EMAIL
+
+    # Find user
+    target_user_id = request.user_id if request and request.user_id else None
+    fcm_token = None
+    if not target_user_id:
+        user_res = supabase.table("users").select("*").eq("device_id", device_id).execute()
+        if user_res.data:
+            target_user_id = user_res.data[0]["id"]
+            fcm_token = user_res.data[0].get("fcm_token")
+        else:
+            all_users = supabase.table("users").select("*").limit(1).execute()
+            if all_users.data:
+                target_user_id = all_users.data[0]["id"]
+                fcm_token = all_users.data[0].get("fcm_token")
+            else:
+                raise HTTPException(status_code=404, detail="No user found for report generation")
+    else:
+        user_res = supabase.table("users").select("*").eq("id", target_user_id).execute()
+        fcm_token = user_res.data[0].get("fcm_token") if user_res.data else None
+
+    try:
+        pdf_bytes, filename = generate_monthly_user_report(target_user_id, target_month, target_year)
+        month_label = datetime(target_year, target_month, 1, tzinfo=IST).strftime("%B %Y")
+
+        email_sent = send_monthly_report_email(
+            to_email=recipient_email,
+            month_str=month_label,
+            pdf_bytes=pdf_bytes,
+            filename=filename
+        )
+
+        fcm_sent = send_fcm_notification(fcm_token, month_label) if fcm_token else False
+
+        return TriggerReportResponse(
+            user_id=target_user_id,
+            month=target_month,
+            year=target_year,
+            email=recipient_email,
+            email_sent=email_sent,
+            fcm_sent=fcm_sent,
+            filename=filename,
+            message="Monthly report generated and processed successfully"
+        )
+    except Exception as e:
+        logger.error(f"Error triggering monthly report: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to generate monthly report: {str(e)}")
+
+@router.get("/reports/download-monthly-report")
+def download_monthly_report(
+    month: Optional[int] = None,
+    year: Optional[int] = None,
+    device_id: str = Depends(get_device_id),
+    token: dict = Depends(verify_token)
+):
+    """
+    Directly returns the generated monthly PDF report bytes for download/viewing.
+    """
+    supabase = get_supabase_client()
+    now = datetime.now(IST)
+    target_month = month or now.month
+    target_year = year or now.year
+
+    user_res = supabase.table("users").select("id").eq("device_id", device_id).execute()
+    if user_res.data:
+        target_user_id = user_res.data[0]["id"]
+    else:
+        all_users = supabase.table("users").select("id").limit(1).execute()
+        if all_users.data:
+            target_user_id = all_users.data[0]["id"]
+        else:
+            raise HTTPException(status_code=404, detail="User not found")
+
+    pdf_bytes, filename = generate_monthly_user_report(target_user_id, target_month, target_year)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
