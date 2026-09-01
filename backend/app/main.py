@@ -36,23 +36,28 @@ def check_emails():
         logger.error(f"Email check failed: {e}", exc_info=True)
 
 
+def safe_eom_reporting_job():
+    """
+    Safely executes the end-of-month reporting job, catching any network/transport
+    errors to prevent unhandled exceptions from terminating the scheduler.
+    """
+    logger.info("[EOM Automation] Starting scheduled end-of-month report generation...")
+    try:
+        run_end_of_month_reporting_job()
+        logger.info("[EOM Automation] Scheduled report job completed successfully.")
+    except Exception as e:
+        logger.error(f"[EOM Automation] Scheduled report job encountered an error: {e}", exc_info=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Start the scheduler
+    # Startup: Start the scheduler with only End-of-Month automated reporting
+    # Note: Continuous IMAP email polling is disabled to prevent timeout cycles and container restarts.
     settings = get_settings()
-    
-    # 1. IMAP Email polling
-    scheduler.add_job(
-        check_emails,
-        "interval",
-        minutes=settings.EMAIL_CHECK_INTERVAL_MINUTES,
-        id="email_check_interval",
-        replace_existing=True,
-    )
 
-    # 2. Automated End-of-Month PDF Report Generation at 22:00 on the last day of each month
+    # Automated End-of-Month PDF Report Generation at 22:00 (10:00 PM) on the last day of each month
     scheduler.add_job(
-        run_end_of_month_reporting_job,
+        safe_eom_reporting_job,
         CronTrigger(day="last", hour=22, minute=0, timezone="Asia/Kolkata"),
         id="eom_report_automation",
         replace_existing=True,
@@ -60,7 +65,7 @@ async def lifespan(app: FastAPI):
 
     scheduler.start()
     logger.info(
-        f"APScheduler started (Email interval: {settings.EMAIL_CHECK_INTERVAL_MINUTES}m, EOM Cron: 22:00 on last day of month)"
+        "APScheduler started (EOM Cron: 22:00 Asia/Kolkata on last day of month)"
     )
     yield
     # Shutdown: Stop the scheduler

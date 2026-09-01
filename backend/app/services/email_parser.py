@@ -84,6 +84,16 @@ SMS_UPI_REF_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# ── Axis Bank Credit Card SMS format ─────────────────────────────────────────
+AXIS_CC_PATTERN = re.compile(
+    r"(?:Spent|spent)\s+(?:INR|Rs\.?|₹)\s*([\d,]+(?:\.\d+)?)\s*[\r\n]+"
+    r"Axis\s+Bank\s+Card\s+no\.\s*(?:XX)?(\d{4})\s*[\r\n]+"
+    r"(\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s*(?:IST)?\s*[\r\n]+"
+    r"([^\r\n]+?)\s*[\r\n]+"
+    r"(?:Avl\s+Limit|Available\s+Limit)",
+    re.IGNORECASE,
+)
+
 # ── Credit Limit alert ───────────────────────────────────────────────────────
 AVAILABLE_LIMIT_PATTERN = re.compile(
     r"Available\s+Credit\s+Limit[:\s]+(?:INR|Rs\.?)\s*([\d,]+\.\d{2})",
@@ -235,6 +245,48 @@ def parse_sms_transaction(body: str) -> Optional[ParsedTransaction]:
         is_refund=is_refund,
         source=TransactionSource.SMS,
         transacted_at=_parse_sms_datetime(date_match.group(1)),
+        raw_message=body,
+    )
+
+
+def parse_axis_credit_card_sms(body: str) -> Optional[ParsedTransaction]:
+    """
+    Parse an Axis Bank Credit Card transaction SMS alert.
+
+    Expected format:
+        Spent INR 1423
+        Axis Bank Card no. XX1930
+        31-08-26 20:30:20 IST
+        CAS*Only Wh
+        Avl Limit: INR 116012
+        Not you? SMS BLOCK 1930 to 919951860002
+    """
+    match = AXIS_CC_PATTERN.search(body)
+    if not match:
+        return None
+
+    raw_amount = match.group(1)
+    card_last4 = match.group(2)
+    raw_date = match.group(3)
+    merchant = match.group(4).strip() if match.group(4) else "Unknown"
+
+    try:
+        transacted_at = datetime.strptime(raw_date, "%d-%m-%y %H:%M:%S")
+    except Exception:
+        transacted_at = datetime.now()
+
+    date_numeric_key = re.sub(r"[^\d]", "", raw_date)
+    upi_ref = f"AXIS-{card_last4}-{date_numeric_key}"
+
+    return ParsedTransaction(
+        card_masked=f"XX{card_last4}",
+        amount=_parse_indian_amount(raw_amount),
+        merchant=merchant,
+        upi_ref_id=upi_ref,
+        transaction_type=TransactionType.DEBIT,
+        is_refund=False,
+        source=TransactionSource.SMS,
+        transacted_at=transacted_at,
         raw_message=body,
     )
 

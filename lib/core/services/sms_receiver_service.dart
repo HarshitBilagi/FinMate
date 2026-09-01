@@ -303,8 +303,71 @@ class SmsReceiverService {
       );
     }
 
+    // ── Pattern 3: Axis Bank Credit Card SMS Alert ────────────────────────────
+    //  Spent INR 1423
+    //  Axis Bank Card no. XX1930
+    //  31-08-26 20:30:20 IST
+    //  CAS*Only Wh
+    //  Avl Limit: INR 116012
+    final axisCcRegex = RegExp(
+      r'(?:Spent|spent)\s+(?:INR|Rs\.?|₹)\s*([\d,]+(?:\.\d+)?)\s*[\r\n]+'
+      r'Axis\s+Bank\s+Card\s+no\.\s*(?:XX)?(\d{4})\s*[\r\n]+'
+      r'(\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s*(?:IST)?\s*[\r\n]+'
+      r'([^\r\n]+?)\s*[\r\n]+'
+      r'(?:Avl\s+Limit|Available\s+Limit)',
+      caseSensitive: false,
+    );
+
+    final axisMatch = axisCcRegex.firstMatch(body);
+    if (axisMatch != null) {
+      final amount = axisMatch.group(1)?.replaceAll(',', '') ?? '0.00';
+      final cardLast4 = axisMatch.group(2) ?? '0000';
+      final rawDate = axisMatch.group(3) ?? '';
+      final merchant = axisMatch.group(4)?.trim() ?? 'Unknown';
+      final txnDate = _parseAxisDate(rawDate);
+      final dateNumericKey = rawDate.replaceAll(RegExp(r'[^\d]'), '');
+      final upi = 'AXIS-$cardLast4-$dateNumericKey';
+
+      debugPrint('[SMS Parser] Axis CC Match → card=XX$cardLast4 amount=$amount upi=$upi merchant=$merchant date=$txnDate');
+
+      return TransactionNotification(
+        transactionId: 'txn-sms-${DateTime.now().millisecondsSinceEpoch}',
+        amount: amount,
+        merchant: merchant,
+        upiRefId: upi,
+        cardMasked: 'XX$cardLast4',
+        action: 'categorize',
+        transactionDate: txnDate,
+      );
+    }
+
     debugPrint('[SMS Parser] No pattern matched for body: ${body.substring(0, body.length.clamp(0, 80))}…');
     return null;
+  }
+
+  /// Parse Axis Bank date string "31-08-26 20:30:20" into a [DateTime].
+  static DateTime? _parseAxisDate(String raw) {
+    try {
+      final parts = raw.trim().split(RegExp(r'\s+'));
+      if (parts.length != 2) return null;
+      final dateParts = parts[0].split('-');
+      final timeParts = parts[1].split(':');
+      if (dateParts.length != 3 || timeParts.length != 3) return null;
+
+      final day = int.parse(dateParts[0]);
+      final month = int.parse(dateParts[1]);
+      final yearShort = int.parse(dateParts[2]);
+      final year = yearShort < 50 ? 2000 + yearShort : 1900 + yearShort;
+
+      final hour = int.parse(timeParts[0]);
+      final minute = int.parse(timeParts[1]);
+      final second = int.parse(timeParts[2]);
+
+      return DateTime(year, month, day, hour, minute, second);
+    } catch (e) {
+      debugPrint('[SMS Parser] Axis date parse error for "$raw": $e');
+      return null;
+    }
   }
 
   /// Parse an ICICI-style date string "dd-MMM-yy" (e.g. "04-Jun-26") into a [DateTime].
