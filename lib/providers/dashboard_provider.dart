@@ -33,7 +33,30 @@ class DashboardProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   double get savingsBalance => _savingsBalance;
   List<CardModel> get cards => _cards;
-  List<Transaction> get recentTransactions => _recentTransactions;
+
+  /// Comparator prioritizing uncategorized transactions first, then most recent first.
+  static int compareTransactionsPrioritized(Transaction a, Transaction b) {
+    final aCat = a.category.trim().toLowerCase();
+    final bCat = b.category.trim().toLowerCase();
+    final aIsUncategorized = aCat == 'uncategorized' || aCat.isEmpty;
+    final bIsUncategorized = bCat == 'uncategorized' || bCat.isEmpty;
+
+    if (aIsUncategorized && !bIsUncategorized) return -1;
+    if (!aIsUncategorized && bIsUncategorized) return 1;
+
+    // Secondary: Most recent first
+    return b.transactedAt.compareTo(a.transactedAt);
+  }
+
+  /// All transactions sorted with uncategorized first, followed by most recent first.
+  List<Transaction> get sortedTransactions {
+    final list = List<Transaction>.from(_recentTransactions);
+    list.sort(compareTransactionsPrioritized);
+    return list;
+  }
+
+  /// Prioritized list of transactions with uncategorized items pinned to the top.
+  List<Transaction> get recentTransactions => sortedTransactions;
 
   double get monthlyBudget => _monthlyBudget;
   Map<String, double> get categoryBudgetLimits => Map.unmodifiable(_categoryBudgetLimits);
@@ -105,9 +128,11 @@ class DashboardProvider extends ChangeNotifier {
 
   List<Transaction> get currentMonthTransactions {
     final now = DateTime.now();
-    return _recentTransactions.where((txn) =>
+    final list = _recentTransactions.where((txn) =>
         txn.transactedAt.month == now.month &&
         txn.transactedAt.year == now.year).toList();
+    list.sort(compareTransactionsPrioritized);
+    return list;
   }
 
   List<Transaction> get uncategorized {
@@ -225,6 +250,8 @@ class DashboardProvider extends ChangeNotifier {
         }
       }
 
+      _recentTransactions.sort(compareTransactionsPrioritized);
+
       // Hydrate category budgets alongside monthly dashboard hydration
       try {
         final now = DateTime.now();
@@ -282,6 +309,8 @@ class DashboardProvider extends ChangeNotifier {
           _recentTransactions.add(pt);
         }
       }
+
+      _recentTransactions.sort(compareTransactionsPrioritized);
 
       // Silently sync category budgets
       try {
@@ -422,6 +451,7 @@ class DashboardProvider extends ChangeNotifier {
         );
       }
     }
+    _recentTransactions.sort(compareTransactionsPrioritized);
     _errorMessage = null;
     notifyListeners();
 
@@ -465,6 +495,7 @@ class DashboardProvider extends ChangeNotifier {
           );
         }
       }
+      _recentTransactions.sort(compareTransactionsPrioritized);
       notifyListeners();
 
       await Future.delayed(const Duration(milliseconds: 600));
@@ -495,11 +526,12 @@ class DashboardProvider extends ChangeNotifier {
     final isTempId = transactionId.startsWith('txn-');
     final oldCategory = txn.category;
 
-    // Optimistic UI update — apply locally FIRST, then notify
+    // Optimistic UI update — apply locally FIRST, sort, then notify
     _recentTransactions[idx] = txn.copyWith(
       category: category,
       isProcessing: true,
     );
+    _recentTransactions.sort(compareTransactionsPrioritized);
     _errorMessage = null;
     notifyListeners();
 
@@ -537,6 +569,7 @@ class DashboardProvider extends ChangeNotifier {
           isProcessing: false,
         );
       }
+      _recentTransactions.sort(compareTransactionsPrioritized);
       notifyListeners();
 
       // Write-verification delay before silent background refresh
@@ -551,6 +584,7 @@ class DashboardProvider extends ChangeNotifier {
           category: oldCategory,
           isProcessing: false,
         );
+        _recentTransactions.sort(compareTransactionsPrioritized);
       }
       _errorMessage = e.message;
       notifyListeners();
@@ -563,6 +597,7 @@ class DashboardProvider extends ChangeNotifier {
           category: oldCategory,
           isProcessing: false,
         );
+        _recentTransactions.sort(compareTransactionsPrioritized);
       }
       _errorMessage = "Failed to categorize: $e";
       notifyListeners();
@@ -665,6 +700,7 @@ class DashboardProvider extends ChangeNotifier {
     );
 
     _recentTransactions.insert(0, newTxn);
+    _recentTransactions.sort(compareTransactionsPrioritized);
     notifyListeners();
 
     try {

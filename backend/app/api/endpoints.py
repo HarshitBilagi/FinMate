@@ -486,7 +486,11 @@ def get_transactions(
                     transacted_at=str(transacted_at_val)
                 )
             )
-            
+
+        # Prioritize uncategorized transactions first, then most recent first
+        transactions.sort(key=lambda t: t.transacted_at, reverse=True)
+        transactions.sort(key=lambda t: 0 if (t.category or "").strip().lower() in ("uncategorized", "") else 1)
+
         return TransactionsListResponse(
             transactions=transactions,
             count=len(transactions)
