@@ -98,6 +98,33 @@ class FinanceApiClient {
     );
   }
 
+  /// Fetches per-category budgets and spending for a given month and year.
+  Future<Map<String, dynamic>> getCategoryBudgets(int month, int year) async {
+    return _request('GET', '/budgets/categories?month=$month&year=$year');
+  }
+
+  /// Sets per-category budget limits for a given month and year.
+  Future<Map<String, dynamic>> setCategoryBudgets(
+    int month,
+    int year,
+    Map<String, double> budgets,
+  ) async {
+    final budgetItems = budgets.entries.map((e) => {
+          'category': e.key,
+          'budget_limit': e.value,
+        }).toList();
+
+    return _request(
+      'POST',
+      '/budgets/categories',
+      body: {
+        'month': month,
+        'year': year,
+        'budgets': budgetItems,
+      },
+    );
+  }
+
   /// Creates a new transaction parsed by the local SMS receiver on the backend.
   Future<Map<String, dynamic>> createTransaction({
     required String upiRefId,

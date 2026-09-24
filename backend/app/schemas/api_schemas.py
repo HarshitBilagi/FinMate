@@ -66,3 +66,34 @@ class TransactionListItem(BaseModel):
 class TransactionsListResponse(BaseModel):
     transactions: List[TransactionListItem]
     count: int
+
+class CategoryBudgetSetItem(BaseModel):
+    category: str
+    budget_limit: float
+
+class SetCategoryBudgetsRequest(BaseModel):
+    month: int
+    year: int
+    budgets: List[CategoryBudgetSetItem]
+
+class CategoryBudgetStatusItem(BaseModel):
+    category: str
+    budget_limit: float
+    spent: float
+    remaining: float
+    percentage_used: float
+
+class CategoryBudgetsResponse(BaseModel):
+    month: int
+    year: int
+    categories: List[CategoryBudgetStatusItem]
+    total_budget: float = 0.0
+    total_spent: float = 0.0
+    total_remaining: float = 0.0
+
+class SetCategoryBudgetsResponse(BaseModel):
+    message: str
+    updated_count: int
+    month: int
+    year: int
+    budgets: List[CategoryBudgetSetItem]

@@ -8,6 +8,8 @@ library;
 import 'package:flutter/material.dart';
 import 'package:personal_finance_assistant/models/card_model.dart';
 import 'package:personal_finance_assistant/models/transaction.dart';
+import 'package:personal_finance_assistant/models/category_budget.dart';
+import 'package:personal_finance_assistant/constants/categories.dart';
 import 'package:personal_finance_assistant/services/finance_api_client.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -24,6 +26,7 @@ class DashboardProvider extends ChangeNotifier {
   final List<Transaction> _recentTransactions = [];
 
   double _monthlyBudget = 50000.0;
+  final Map<String, double> _categoryBudgetLimits = {};
 
   bool get isLoading => _isLoading;
   bool get isCategorizing => _isCategorizing;
@@ -33,6 +36,51 @@ class DashboardProvider extends ChangeNotifier {
   List<Transaction> get recentTransactions => _recentTransactions;
 
   double get monthlyBudget => _monthlyBudget;
+  Map<String, double> get categoryBudgetLimits => Map.unmodifiable(_categoryBudgetLimits);
+
+  /// Dynamically computes category budgets, remaining amounts, and percentages.
+  /// Automatically recomputes whenever transactions are added, edited, or deleted.
+  Map<String, CategoryBudget> get categoryBudgets {
+    final Map<String, CategoryBudget> result = {};
+    final txns = currentMonthTransactions;
+
+    // Initialize spent map for all 15 master categories
+    final Map<String, double> categorySpents = {};
+    for (final cat in kExpenseCategories) {
+      categorySpents[cat.id] = 0.0;
+    }
+
+    for (final txn in txns) {
+      final rawCat = txn.category.toLowerCase().trim();
+      final resolved = (rawCat == 'transportation' || rawCat == 'transport') ? 'transportion' : rawCat;
+      final targetKey = categorySpents.containsKey(resolved) ? resolved : 'uncategorized';
+      final isCredit = txn.transactionType == 'credit' || txn.isRefund;
+      final signedAmount = isCredit ? -txn.amount : txn.amount;
+      categorySpents[targetKey] = (categorySpents[targetKey] ?? 0.0) + signedAmount;
+    }
+
+    for (final cat in kExpenseCategories) {
+      final limit = _categoryBudgetLimits[cat.id] ?? 0.0;
+      final spent = categorySpents[cat.id] ?? 0.0;
+      final remaining = limit - spent;
+      final double percentage;
+      if (limit > 0) {
+        percentage = ((spent / limit) * 100.0).clamp(0.0, 999.0);
+      } else {
+        percentage = spent > 0 ? 100.0 : 0.0;
+      }
+
+      result[cat.id] = CategoryBudget(
+        category: cat.id,
+        budgetLimit: limit,
+        spent: spent,
+        remaining: remaining,
+        percentageUsed: percentage,
+      );
+    }
+
+    return result;
+  }
 
   Future<void> initBudget() async {
     try {
@@ -177,6 +225,23 @@ class DashboardProvider extends ChangeNotifier {
         }
       }
 
+      // Hydrate category budgets alongside monthly dashboard hydration
+      try {
+        final now = DateTime.now();
+        final budgetData = await _apiClient.getCategoryBudgets(now.month, now.year);
+        final List<dynamic> catList = budgetData['categories'] ?? [];
+        for (final item in catList) {
+          if (item is Map<String, dynamic>) {
+            final catName = (item['category'] as String? ?? '').toLowerCase().trim();
+            final resolved = (catName == 'transportation' || catName == 'transport') ? 'transportion' : catName;
+            final limit = (item['budget_limit'] as num?)?.toDouble() ?? 0.0;
+            _categoryBudgetLimits[resolved] = limit;
+          }
+        }
+      } catch (e) {
+        debugPrint('[DashboardProvider] Warning fetching category budgets during hydration: $e');
+      }
+
       debugPrint('[API READ] Boot initialization fetched ${parsedTransactionsList.length} total history rows.');
     } on FinanceApiException catch (e) {
       _errorMessage = e.message;
@@ -218,11 +283,99 @@ class DashboardProvider extends ChangeNotifier {
         }
       }
 
+      // Silently sync category budgets
+      try {
+        final now = DateTime.now();
+        final budgetData = await _apiClient.getCategoryBudgets(now.month, now.year);
+        final List<dynamic> catList = budgetData['categories'] ?? [];
+        for (final item in catList) {
+          if (item is Map<String, dynamic>) {
+            final catName = (item['category'] as String? ?? '').toLowerCase().trim();
+            final resolved = (catName == 'transportation' || catName == 'transport') ? 'transportion' : catName;
+            final limit = (item['budget_limit'] as num?)?.toDouble() ?? 0.0;
+            _categoryBudgetLimits[resolved] = limit;
+          }
+        }
+      } catch (_) {}
+
       debugPrint('[API SILENT REFRESH] Fetched ${parsedTransactionsList.length} rows without loading flash.');
       notifyListeners();
     } catch (e) {
       debugPrint('[API SILENT REFRESH] Failed: $e');
       // Silent refresh failures are non-fatal — the optimistic state is still valid
+    }
+  }
+
+  /// Explicitly fetches category budgets for a specific month and year.
+  Future<void> fetchCategoryBudgets({int? month, int? year}) async {
+    final now = DateTime.now();
+    final targetMonth = month ?? now.month;
+    final targetYear = year ?? now.year;
+
+    try {
+      final res = await _apiClient.getCategoryBudgets(targetMonth, targetYear);
+      final List<dynamic> catList = res['categories'] ?? [];
+      for (final item in catList) {
+        if (item is Map<String, dynamic>) {
+          final catName = (item['category'] as String? ?? '').toLowerCase().trim();
+          final resolved = (catName == 'transportation' || catName == 'transport') ? 'transportion' : catName;
+          final limit = (item['budget_limit'] as num?)?.toDouble() ?? 0.0;
+          _categoryBudgetLimits[resolved] = limit;
+        }
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[DashboardProvider] Failed to fetch category budgets: $e');
+    }
+  }
+
+  /// Saves updated category budgets to backend and updates local state optimistically.
+  Future<bool> saveCategoryBudgets(int month, int year, Map<String, double> budgets) async {
+    try {
+      // Optimistic local update
+      budgets.forEach((cat, limit) {
+        final resolved = (cat == 'transportation' || cat == 'transport') ? 'transportion' : cat;
+        _categoryBudgetLimits[resolved] = limit;
+      });
+      notifyListeners();
+
+      await _apiClient.setCategoryBudgets(month, year, budgets);
+      await fetchCategoryBudgets(month: month, year: year);
+      return true;
+    } catch (e) {
+      debugPrint('[DashboardProvider] Failed to save category budgets: $e');
+      _errorMessage = "Failed to save category budgets: $e";
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Fetches budget limits from the previous month to support "Auto-fill from Last Month".
+  Future<Map<String, double>> fetchPreviousMonthBudgets({int? currentMonth, int? currentYear}) async {
+    final now = DateTime.now();
+    final cm = currentMonth ?? now.month;
+    final cy = currentYear ?? now.year;
+    final prevMonth = cm == 1 ? 12 : cm - 1;
+    final prevYear = cm == 1 ? cy - 1 : cy;
+
+    try {
+      final res = await _apiClient.getCategoryBudgets(prevMonth, prevYear);
+      final List<dynamic> catList = res['categories'] ?? [];
+      final Map<String, double> prevBudgets = {};
+      for (final item in catList) {
+        if (item is Map<String, dynamic>) {
+          final catName = (item['category'] as String? ?? '').toLowerCase().trim();
+          final resolved = (catName == 'transportation' || catName == 'transport') ? 'transportion' : catName;
+          final limit = (item['budget_limit'] as num?)?.toDouble() ?? 0.0;
+          if (limit > 0) {
+            prevBudgets[resolved] = limit;
+          }
+        }
+      }
+      return prevBudgets;
+    } catch (e) {
+      debugPrint('[DashboardProvider] Failed to fetch previous month budgets: $e');
+      return {};
     }
   }
 

@@ -23,7 +23,12 @@ from app.schemas.api_schemas import (
     CreateTransactionRequest,
     CreateTransactionResponse,
     TransactionListItem,
-    TransactionsListResponse
+    TransactionsListResponse,
+    CategoryBudgetSetItem,
+    SetCategoryBudgetsRequest,
+    CategoryBudgetStatusItem,
+    CategoryBudgetsResponse,
+    SetCategoryBudgetsResponse
 )
 
 IST = timezone(timedelta(hours=5, minutes=30))
@@ -619,4 +624,209 @@ def download_monthly_report(
         content=pdf_bytes,
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+# ── Per-Category Monthly Budget System ─────────────────────────────────────────
+
+MASTER_CATEGORIES = [
+    "rent",
+    "whey protein",
+    "daily protein",
+    "eggs",
+    "sip",
+    "stocks",
+    "gym fees",
+    "beverages",
+    "outside food",
+    "subscriptions",
+    "groceries",
+    "transportion",
+    "medicine",
+    "shopping",
+    "uncategorized"
+]
+
+def normalize_category_name(cat: Optional[str]) -> str:
+    if not cat:
+        return "uncategorized"
+    norm = cat.strip().lower()
+    if norm in ("transportation", "transport"):
+        return "transportion"
+    return norm
+
+# Fallback store when Supabase category_budgets table is not yet migrated
+# Key: f"{user_id}:{year}:{month}:{category}" -> float
+_fallback_category_budgets: dict = {}
+
+def get_auth_user_id(token: dict, device_id: str, supabase) -> str:
+    sub = token.get("sub") if isinstance(token, dict) else None
+    if sub and sub != "dev-user-id":
+        return sub
+    user_res = supabase.table("users").select("id").eq("device_id", device_id).execute()
+    if user_res.data:
+        return user_res.data[0]["id"]
+    return "553f4a9d-2502-4fa1-bef0-f6f867d116b2"
+
+@router.get("/budgets/categories", response_model=CategoryBudgetsResponse)
+def get_category_budgets(
+    month: Optional[int] = None,
+    year: Optional[int] = None,
+    device_id: str = Depends(get_device_id),
+    token: dict = Depends(verify_token)
+):
+    """
+    Fetches user budget limits from category_budgets for the requested month/year.
+    Aggregates debits and credits for each category in that month.
+    Returns each category with:
+    - budget_limit: configured budget (or 0.00 if unset)
+    - spent: sum(debit) - sum(credit)
+    - remaining: budget_limit - spent
+    - percentage_used: (spent / budget_limit) * 100 (safely calculated)
+    """
+    supabase = get_supabase_client()
+    now = datetime.now(IST)
+    target_month = month or now.month
+    target_year = year or now.year
+
+    auth_user_id = get_auth_user_id(token, device_id, supabase)
+
+    # 1. Fetch user's cards to filter transactions
+    user_res = supabase.table("users").select("id").eq("device_id", device_id).execute()
+    card_ids = []
+    if user_res.data:
+        u_id = user_res.data[0]["id"]
+        cards_res = supabase.table("cards").select("id").eq("user_id", u_id).execute()
+        if cards_res.data:
+            card_ids = [c["id"] for c in cards_res.data]
+
+    # 2. Fetch configured budget limits
+    budget_limits_map: dict = {cat: 0.0 for cat in MASTER_CATEGORIES}
+    try:
+        budgets_res = supabase.table("category_budgets").select("category, budget_limit").eq("user_id", auth_user_id).eq("month", target_month).eq("year", target_year).execute()
+        if budgets_res.data:
+            for b in budgets_res.data:
+                c_norm = normalize_category_name(b.get("category"))
+                budget_limits_map[c_norm] = float(b.get("budget_limit", 0.0))
+    except Exception as e:
+        logger.warning(f"Could not read from Supabase category_budgets table ({e}). Checking fallback cache.")
+
+    # Overlay with fallback store if unset
+    for cat in MASTER_CATEGORIES:
+        fb_key = f"{auth_user_id}:{target_year}:{target_month}:{cat}"
+        if fb_key in _fallback_category_budgets and budget_limits_map[cat] == 0.0:
+            budget_limits_map[cat] = _fallback_category_budgets[fb_key]
+
+    # 3. Aggregate debits and credits for the target month
+    start_dt = datetime(target_year, target_month, 1, 0, 0, 0, tzinfo=IST)
+    if target_month == 12:
+        end_dt = datetime(target_year + 1, 1, 1, 0, 0, 0, tzinfo=IST)
+    else:
+        end_dt = datetime(target_year, target_month + 1, 1, 0, 0, 0, tzinfo=IST)
+
+    query = supabase.table("transactions").select("amount, category, transaction_type, is_refund").gte(
+        "transacted_at", start_dt.isoformat()
+    ).lt(
+        "transacted_at", end_dt.isoformat()
+    )
+
+    if card_ids:
+        query = query.in_("card_id", card_ids)
+
+    txns_res = query.execute()
+    txns = txns_res.data or []
+
+    category_debits: dict = {cat: 0.0 for cat in MASTER_CATEGORIES}
+    category_credits: dict = {cat: 0.0 for cat in MASTER_CATEGORIES}
+
+    for t in txns:
+        amt = float(t.get("amount", 0.0))
+        t_type = (t.get("transaction_type") or "debit").lower()
+        is_refund = t.get("is_refund", False) or t_type == "credit"
+        cat_norm = normalize_category_name(t.get("category"))
+        if cat_norm not in category_debits:
+            cat_norm = "uncategorized"
+
+        if is_refund:
+            category_credits[cat_norm] += amt
+        else:
+            category_debits[cat_norm] += amt
+
+    # 4. Build category status items
+    items: List[CategoryBudgetStatusItem] = []
+    for cat in MASTER_CATEGORIES:
+        limit = budget_limits_map.get(cat, 0.0)
+        spent = category_debits[cat] - category_credits[cat]
+        remaining = limit - spent
+        if limit > 0:
+            pct = round((spent / limit) * 100.0, 2)
+            pct = max(0.0, pct)
+        else:
+            pct = 100.0 if spent > 0 else 0.0
+
+        items.append(
+            CategoryBudgetStatusItem(
+                category=cat,
+                budget_limit=round(limit, 2),
+                spent=round(spent, 2),
+                remaining=round(remaining, 2),
+                percentage_used=pct
+            )
+        )
+
+    total_budget = round(sum(c.budget_limit for c in items), 2)
+    total_spent = round(sum(c.spent for c in items), 2)
+    total_remaining = round(total_budget - total_spent, 2)
+
+    return CategoryBudgetsResponse(
+        month=target_month,
+        year=target_year,
+        categories=items,
+        total_budget=total_budget,
+        total_spent=total_spent,
+        total_remaining=total_remaining
+    )
+
+@router.post("/budgets/categories", response_model=SetCategoryBudgetsResponse)
+def set_category_budgets(
+    request: SetCategoryBudgetsRequest,
+    device_id: str = Depends(get_device_id),
+    token: dict = Depends(verify_token)
+):
+    """
+    Upserts the list of category budgets into category_budgets using user_id, category, month, and year.
+    """
+    supabase = get_supabase_client()
+    auth_user_id = get_auth_user_id(token, device_id, supabase)
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    records = []
+    for item in request.budgets:
+        cat_norm = normalize_category_name(item.category)
+        limit_val = float(item.budget_limit)
+        records.append({
+            "user_id": auth_user_id,
+            "category": cat_norm,
+            "budget_limit": limit_val,
+            "month": request.month,
+            "year": request.year,
+            "updated_at": now_iso
+        })
+        # Always store in memory fallback cache
+        _fallback_category_budgets[f"{auth_user_id}:{request.year}:{request.month}:{cat_norm}"] = limit_val
+
+    # Attempt Supabase upsert
+    try:
+        supabase.table("category_budgets").upsert(
+            records,
+            on_conflict="user_id,category,month,year"
+        ).execute()
+    except Exception as e:
+        logger.warning(f"Supabase upsert to category_budgets failed: {e}. Saved in fallback store.")
+
+    return SetCategoryBudgetsResponse(
+        message=f"Successfully updated {len(request.budgets)} category budgets",
+        updated_count=len(request.budgets),
+        month=request.month,
+        year=request.year,
+        budgets=request.budgets
     )

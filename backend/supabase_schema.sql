@@ -109,3 +109,32 @@ CREATE TRIGGER trg_users_updated_at
 CREATE TRIGGER trg_cards_updated_at
     BEFORE UPDATE ON cards
     FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- ─── CATEGORY BUDGETS ─────────────────────────────────────────────────────────
+-- Tracks user-configured monthly spending limits per category.
+CREATE TABLE category_budgets (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id         UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    category        TEXT NOT NULL,
+    budget_limit    NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
+    month           INT NOT NULL,
+    year            INT NOT NULL,
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (user_id, category, month, year)
+);
+
+CREATE INDEX idx_category_budgets_user_month_year ON category_budgets(user_id, month, year);
+CREATE INDEX idx_category_budgets_category ON category_budgets(category);
+
+ALTER TABLE category_budgets ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage their own category budgets"
+    ON category_budgets
+    FOR ALL
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
+CREATE TRIGGER trg_category_budgets_updated_at
+    BEFORE UPDATE ON category_budgets
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at();

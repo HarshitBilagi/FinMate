@@ -13,6 +13,7 @@ import 'package:intl/intl.dart';
 import 'package:personal_finance_assistant/providers/dashboard_provider.dart';
 import 'package:personal_finance_assistant/constants/categories.dart';
 import 'package:personal_finance_assistant/services/pdf_report_service.dart';
+import 'package:personal_finance_assistant/screens/expenses/category_budget_modal.dart';
 
 class ExpensesScreen extends StatefulWidget {
   const ExpensesScreen({super.key});
@@ -23,27 +24,6 @@ class ExpensesScreen extends StatefulWidget {
 
 class _ExpensesScreenState extends State<ExpensesScreen> {
   bool _isExporting = false;
-
-  Color _getMacroColorForCategory(String category) {
-    switch (category.toLowerCase().trim()) {
-      case 'sip':
-      case 'stocks':
-        return const Color(0xFF10B981); // Investments - Emerald
-      case 'rent':
-      case 'whey protein':
-      case 'daily protein':
-      case 'eggs':
-      case 'gym fees':
-      case 'groceries':
-      case 'transportion':
-      case 'transportation':
-      case 'transport':
-      case 'medicine':
-        return const Color(0xFF6366F1); // Fixed/Health - Indigo
-      default:
-        return const Color(0xFFF59E0B); // Variables - Amber
-    }
-  }
 
   Future<void> _exportPdfReport() async {
     if (_isExporting) return;
@@ -89,6 +69,11 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.account_balance_wallet_outlined),
+            tooltip: 'Manage Category Budgets',
+            onPressed: () => CategoryBudgetModal.show(context),
+          ),
           IconButton(
             icon: _isExporting
                 ? const SizedBox(
@@ -363,30 +348,45 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                         children: [
                           // Table Header
                           Padding(
-                            padding: const EdgeInsets.all(16),
+                            padding: const EdgeInsets.fromLTRB(16, 14, 12, 12),
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
-                                  'Category',
+                                  'CATEGORY BUDGETS',
                                   style: GoogleFonts.inter(
                                     fontSize: 12,
-                                    fontWeight: FontWeight.w700,
+                                    fontWeight: FontWeight.w800,
                                     color: isDark
-                                        ? Colors.white.withValues(alpha: 0.4)
-                                        : Colors.black.withValues(alpha: 0.4),
-                                    letterSpacing: 1.0,
+                                        ? Colors.white.withValues(alpha: 0.5)
+                                        : Colors.black.withValues(alpha: 0.5),
+                                    letterSpacing: 0.8,
                                   ),
                                 ),
-                                Text(
-                                  'Total Outflow',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    color: isDark
-                                        ? Colors.white.withValues(alpha: 0.4)
-                                        : Colors.black.withValues(alpha: 0.4),
-                                    letterSpacing: 1.0,
+                                InkWell(
+                                  onTap: () => CategoryBudgetModal.show(context),
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          Icons.tune_rounded,
+                                          size: 14,
+                                          color: Color(0xFF0D9488),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          'Set Budgets',
+                                          style: GoogleFonts.inter(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: const Color(0xFF0D9488),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ],
@@ -402,50 +402,167 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
                           ...categoryTotals.entries.map((entry) {
                             final catName = entry.key;
                             final catAmount = entry.value;
-                            final macroColor = _getMacroColorForCategory(catName);
                             final categoryTitle = getCategoryLabel(catName);
+                            final categoryOption = kExpenseCategories.firstWhere(
+                              (c) => c.id == catName,
+                              orElse: () => const CategoryOption(
+                                id: 'uncategorized',
+                                label: 'Uncategorized',
+                                icon: Icons.help_outline,
+                                color: Color(0xFF94A3B8),
+                              ),
+                            );
+
+                            final categoryBudget = dashboard.categoryBudgets[catName];
+                            final budgetLimit = categoryBudget?.budgetLimit ?? 0.0;
+                            final hasBudget = budgetLimit > 0;
+                            final remaining = budgetLimit - catAmount;
+                            final isOverBudget = hasBudget && (catAmount > budgetLimit);
+
+                            final double progressRatio;
+                            if (hasBudget) {
+                              progressRatio = (catAmount / budgetLimit).clamp(0.0, 1.0);
+                            } else {
+                              progressRatio = catAmount > 0 ? 1.0 : 0.0;
+                            }
+
+                            final Color progressColor;
+                            if (!hasBudget) {
+                              progressColor = isDark ? Colors.white24 : Colors.black12;
+                            } else if (isOverBudget) {
+                              progressColor = const Color(0xFFEF4444);
+                            } else if (catAmount > budgetLimit * 0.85) {
+                              progressColor = const Color(0xFFF59E0B);
+                            } else {
+                              progressColor = const Color(0xFF10B981);
+                            }
 
                             return Column(
                               children: [
                                 Padding(
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 16, vertical: 12),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
+                                      // Top Row: Category Icon/Name + Spent / Limit
                                       Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                         children: [
-                                          Container(
-                                            width: 8,
-                                            height: 8,
-                                            decoration: BoxDecoration(
-                                              color: macroColor,
-                                              shape: BoxShape.circle,
-                                            ),
+                                          Row(
+                                            children: [
+                                              Container(
+                                                width: 28,
+                                                height: 28,
+                                                decoration: BoxDecoration(
+                                                  color: categoryOption.color.withValues(alpha: 0.14),
+                                                  borderRadius: BorderRadius.circular(8),
+                                                ),
+                                                child: Icon(
+                                                  categoryOption.icon,
+                                                  color: categoryOption.color,
+                                                  size: 16,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 10),
+                                              Text(
+                                                categoryTitle,
+                                                style: GoogleFonts.inter(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: isDark
+                                                      ? Colors.white.withValues(alpha: 0.9)
+                                                      : const Color(0xFF1E293B),
+                                                ),
+                                              ),
+                                            ],
                                           ),
-                                          const SizedBox(width: 10),
-                                          Text(
-                                            categoryTitle,
-                                            style: GoogleFonts.inter(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w600,
-                                              color: isDark
-                                                  ? Colors.white.withValues(alpha: 0.9)
-                                                  : const Color(0xFF1E293B),
+                                          RichText(
+                                            text: TextSpan(
+                                              children: [
+                                                TextSpan(
+                                                  text: currencyFormat.format(catAmount),
+                                                  style: GoogleFonts.inter(
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: isDark
+                                                        ? Colors.white
+                                                        : const Color(0xFF1E293B),
+                                                  ),
+                                                ),
+                                                if (hasBudget) ...[
+                                                  TextSpan(
+                                                    text: ' / ${currencyFormat.format(budgetLimit)}',
+                                                    style: GoogleFonts.inter(
+                                                      fontSize: 12,
+                                                      fontWeight: FontWeight.w500,
+                                                      color: isDark
+                                                          ? Colors.white54
+                                                          : Colors.black45,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ],
                                             ),
                                           ),
                                         ],
                                       ),
-                                      Text(
-                                        currencyFormat.format(catAmount),
-                                        style: GoogleFonts.inter(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w700,
-                                          color: isDark
-                                              ? Colors.white
-                                              : const Color(0xFF1E293B),
-                                        ),
+                                      const SizedBox(height: 6),
+                                      // Second Row: Remaining Balance + Subtle Progress Bar
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          if (hasBudget)
+                                            Text(
+                                              remaining >= 0
+                                                  ? '${currencyFormat.format(remaining)} remaining'
+                                                  : '${currencyFormat.format(-remaining)} over budget',
+                                              style: GoogleFonts.inter(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                                color: remaining >= 0
+                                                    ? const Color(0xFF10B981)
+                                                    : const Color(0xFFEF4444),
+                                              ),
+                                            )
+                                          else
+                                            Text(
+                                              'No budget configured',
+                                              style: GoogleFonts.inter(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w400,
+                                                color: isDark
+                                                    ? Colors.white30
+                                                    : Colors.black38,
+                                              ),
+                                            ),
+                                          if (hasBudget)
+                                            Text(
+                                              '${(catAmount / budgetLimit * 100).toStringAsFixed(0)}%',
+                                              style: GoogleFonts.inter(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                                color: isOverBudget
+                                                    ? const Color(0xFFEF4444)
+                                                    : (isDark ? Colors.white60 : Colors.black54),
+                                              ),
+                                            ),
+                                        ],
                                       ),
+                                      if (hasBudget) ...[
+                                        const SizedBox(height: 6),
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(2.5),
+                                          child: LinearProgressIndicator(
+                                            value: progressRatio,
+                                            minHeight: 4,
+                                            backgroundColor: isDark
+                                                ? Colors.white.withValues(alpha: 0.08)
+                                                : Colors.black.withValues(alpha: 0.06),
+                                            valueColor: AlwaysStoppedAnimation<Color>(progressColor),
+                                          ),
+                                        ),
+                                      ],
                                     ],
                                   ),
                                 ),
